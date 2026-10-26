@@ -1,5 +1,8 @@
 # Wijzigingen
 
+## 0.2.2
+- Ingress-adres zonder dubbele slash (`ingress_entry` verwijderd) en paneel in de zijbalk.
+
 ## 0.2.1
 - Statuscontrole van de Spoolman-verbinding (`GET /api/spoolman`) in de interface.
 
