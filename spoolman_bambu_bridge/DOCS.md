@@ -7,7 +7,7 @@ De bridge boekt **geen** printverbruik af; dat doet SpoolmanSync. Hij leest geen
 1. Kopieer de map `spoolman_bambu_bridge` naar `/addons/spoolman_bambu_bridge` op de Home Assistant-host (Samba- of SSH-add-on).
 2. Instellingen → Add-ons → Add-on store → ⋮ → Opnieuw laden. Onder *Lokale add-ons* verschijnt de bridge; installeer en start hem.
 3. Open "Bambu Bridge" in de zijbalk.
-4. Vul de Spoolman-URL in. De Spoolman-Ingress-add-on heeft geen eigen externe poort; probeer `http://2c829f0e-spoolman-ingress:7912` (niet geverifieerd). Lukt dat niet, installeer dan de niet-Ingress-variant van Spoolman of open de poort.
+4. Vul de Spoolman-URL in. De Spoolman-Ingress-add-on heeft geen eigen externe poort; gebruik `http://2c829f0e-spoolman-ingress:7912` (getest, werkt vanuit de bridge). Lukt dat niet, installeer dan de niet-Ingress-variant van Spoolman of open de poort.
 5. Log in bij Bambu (met verificatiecode indien gevraagd). Het wachtwoord wordt niet opgeslagen, alleen het token.
 6. "Rollen laden", koppel één rol, klik "Nu synchroniseren". Zet pas daarna automatisch synchroniseren aan.
 

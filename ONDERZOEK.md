@@ -37,7 +37,9 @@
 |---|---|
 | Synchronisatie, koppelen, aanmaken zonder duplicaat, pauzeren, herstel, interval, Ingress-weigering, G-code-analyse | **Lokaal getest met gesimuleerde diensten** (12 tests geslaagd) |
 | Gewicht afronden, state na herstart | Lokaal getest |
-| Installatie als lokale add-on, Ingress, mobiele UI | **Nog niet geverifieerd** (geschreven, niet in Home Assistant of browser gedraaid) |
+| Installatie als add-on (via repository-URL met branch), bouw op aarch64, start, UI en API via Ingress | **Getest in Home Assistant** (0.2.1, 2026-10-26) |
+| Verbinding bridge → Spoolman via `http://2c829f0e-spoolman-ingress:7912` (1 actieve rol gevonden) | **Getest in Home Assistant** |
+| Mobiele weergave, UI in een echte browser | **Nog niet geverifieerd** |
 | Bambu-login en Filament Manager-API met echt account | **Nog niet geverifieerd** |
 | Rol zichtbaar in Studio/Handy, selectie op AMS-slot of printerscherm | **Nog niet geverifieerd**; cloudsynchronisatie bewijst dit niet |
 | Verbruik normale/meerkleuren/afgebroken print, weegtests | **Nog niet geverifieerd** |
@@ -53,3 +55,10 @@
 2. Eén rol koppelen en handmatig synchroniseren; resultaat in Studio/Handy bekijken.
 3. Testprint van 1 kleur, daarna meerkleuren en een bewust geannuleerde print; wegen en vergelijken met SpoolmanSync (let op leeg rolgewicht en weegschaalnauwkeurigheid).
 4. Pas daarna bepalen of de G-code-route (of firmware-`ams_mapping`) SpoolmanSync moet aanvullen.
+
+## Uitgevoerd in Home Assistant op 2026-10-26
+- Back-up `04232042` ("Voor Bambu Bridge - 2026-10-26", add-ons + configuratie, zonder database) naast de automatische back-up `cbc1bc89` van 04:24 (met database). Mijn back-up werd pas na een time-out zichtbaar; de Supervisor was daarna even bezig.
+- Spoolman bevat 1 rol: #1 Sunlu PLA Black, 1000 g van 1000 g, niet gearchiveerd. Het veld `extra.active_tray` is door SpoolmanSync aangemaakt.
+- Add-on-repository `https://github.com/iRandomPlays/Financi-n.-#ccr-07122be8-fap75g` toegevoegd en de bridge geïnstalleerd en bijgewerkt naar 0.2.1. De store gebruikt de branch, niet de hoofdtak: na een merge of verwijderen van de branch moet de repository-URL worden aangepast.
+- In de bridge alleen de Spoolman-URL ingesteld. Geen koppelingen, geen Bambu-login, automatisch synchroniseren uit.
+- Spoolman en SpoolmanSync zijn niet gewijzigd.
