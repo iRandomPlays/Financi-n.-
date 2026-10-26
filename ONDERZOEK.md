@@ -40,7 +40,8 @@
 | Installatie als add-on (via repository-URL met branch), bouw op aarch64, start, UI en API via Ingress | **Getest in Home Assistant** (0.2.1, 2026-10-26) |
 | Verbinding bridge → Spoolman via `http://2c829f0e-spoolman-ingress:7912` (1 actieve rol gevonden) | **Getest in Home Assistant** |
 | Mobiele weergave, UI in een echte browser | **Nog niet geverifieerd** |
-| Bambu-login en Filament Manager-API met echt account | **Nog niet geverifieerd** |
+| Bambu-login (met verificatiecode), lijst, gewichtsupdate in Bambu-cloud, naam blijft behouden | **Getest in Home Assistant met het echte Bambu-account** (2026-10-26) |
+| Handmatige en automatische synchronisatie (ronde van 60 s) | **Getest in Home Assistant** (tijdelijke wijziging 1000→999 g en 300→295 g, daarna teruggezet) |
 | Rol zichtbaar in Studio/Handy, selectie op AMS-slot of printerscherm | **Nog niet geverifieerd**; cloudsynchronisatie bewijst dit niet |
 | Verbruik normale/meerkleuren/afgebroken print, weegtests | **Nog niet geverifieerd** |
 
@@ -69,3 +70,10 @@
 - In SpoolmanSync is **geen enkele rol aan een tray gekoppeld**; de logs melden "no spool is assigned". Spoolman bevat maar 1 rol (Sunlu PLA Black) tegenover 4 kleuren in de AMS. De laatste print (24 oktober, 31 g, 86 lagen) is daardoor nergens afgeboekt.
 - De HA-integratie levert wel: printgewicht, printlengte, huidige/totale laag, voortgang, taaknaam en G-code-bestandsnaam (`plate_1.gcode` uit een cloudtaak). Dat is genoeg voor een laaggebaseerd voorstel; het bestand zelf is via de cloud-modus niet beschikbaar zonder LAN-toegangscode of cloud-download.
 - Risico: SpoolmanSync is ontworpen rond één actieve tray; de X2D heeft twee nozzles. Of de sensor "Active Tray" (nu leeg) bij een X2D-print goed werkt, is niet aangetoond.
+
+## Voorraadimport en koppelingen (2026-10-26)
+- Bambu's Filament Manager bevatte 12 rollen, Spoolman 1. Uit Bambu zijn 10 rollen als nieuwe Spoolman-rollen (ID 2-11, filamenten ID 2-9) aangemaakt met het Bambu-ID in de opmerking. Spoolman blijft daarna leidend.
+- Alle 11 koppelingen: Spoolman #1 ↔ 7025377 en #2-#11 ↔ de Bambu-ID's in hun opmerking. Spoolman #1 en #10 zijn twee identieke zwarte C220-rollen; welke fysiek welke is, is willekeurig gekozen en nog niet bevestigd.
+- Niet gekoppeld: Bambu-rol 6651172 (Bambu Lab PLA Matte blauw, 779/1000 g, `createType: ams`). Bambu werkt die zelf bij via de AMS; synchroniseren zou kunnen botsen.
+- Automatisch synchroniseren staat aan (60 s).
+- Nog niet gedaan: rollen aan AMS-trays koppelen in SpoolmanSync. Tray 2 (roze) en 3 (blauw) hebben geen bekende rol in Spoolman.
