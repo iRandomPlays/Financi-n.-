@@ -6,7 +6,7 @@
 | Home Assistant | 2026.10.2, Europe/Amsterdam |
 | Spoolman-Ingress (bytenoodle) | 0.27.0-0, draait; Ingress-poort 7912, geen directe poort |
 | SpoolmanSync-add-on | 1.6.14, draait |
-| Bambu Lab-integratie (`bambu_lab`) | geladen; printer-serienummer 20P9BJ620700578 (model/firmware niet uitgelezen) |
+| Bambu Lab-integratie (`bambu_lab`) | geladen; printer **Bambu X2D** (dubbele nozzle, 0,4 mm; serienummer 20P9BJ620700578), firmware niet uitgelezen; verbinding via `bambu_cloud` (MQTT via Bambu-cloud, niet LAN) |
 | SpoolmanSync-automations | `Tray Change` en `Update Spool` actief voor deze printer |
 | Spoolman Bambu Bridge | niet geïnstalleerd |
 
@@ -62,3 +62,10 @@
 - Add-on-repository `https://github.com/iRandomPlays/Financi-n.-#ccr-07122be8-fap75g` toegevoegd en de bridge geïnstalleerd en bijgewerkt naar 0.2.1. De store gebruikt de branch, niet de hoofdtak: na een merge of verwijderen van de branch moet de repository-URL worden aangepast.
 - In de bridge alleen de Spoolman-URL ingesteld. Geen koppelingen, geen Bambu-login, automatisch synchroniseren uit.
 - Spoolman en SpoolmanSync zijn niet gewijzigd.
+
+## Printer en AMS (uitgelezen 2026-10-26)
+- X2D met 1 AMS (4 trays) en 2 externe spoelen; links en rechts een 0,4 mm hardened-steel nozzle.
+- Trays: 1 wit, 2 roze/rood (#F95D73), 3 blauw, 4 zwart (#161616). Alle `tray_uuid` zijn nullen en `remain` is -1: geen RFID, dus de rolidentiteit komt volledig van handmatige toewijzing. Externe spoelen zijn leeg.
+- In SpoolmanSync is **geen enkele rol aan een tray gekoppeld**; de logs melden "no spool is assigned". Spoolman bevat maar 1 rol (Sunlu PLA Black) tegenover 4 kleuren in de AMS. De laatste print (24 oktober, 31 g, 86 lagen) is daardoor nergens afgeboekt.
+- De HA-integratie levert wel: printgewicht, printlengte, huidige/totale laag, voortgang, taaknaam en G-code-bestandsnaam (`plate_1.gcode` uit een cloudtaak). Dat is genoeg voor een laaggebaseerd voorstel; het bestand zelf is via de cloud-modus niet beschikbaar zonder LAN-toegangscode of cloud-download.
+- Risico: SpoolmanSync is ontworpen rond één actieve tray; de X2D heeft twee nozzles. Of de sensor "Active Tray" (nu leeg) bij een X2D-print goed werkt, is niet aangetoond.
