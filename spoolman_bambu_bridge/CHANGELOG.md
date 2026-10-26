@@ -1,5 +1,8 @@
 # Wijzigingen
 
+## 0.2.6
+- Aangemaakte Bambu-rol: geen dubbel materiaal in de naam ("PLA PLA ...") en kleur als `#RRGGBBFF`.
+
 ## 0.2.5
 - Instelling: nieuwe Spoolman-rollen automatisch in Bambu aanmaken (standaard uit; max. 5 per ronde, rollen zonder of met 0 g worden overgeslagen).
 

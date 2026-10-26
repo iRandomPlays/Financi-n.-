@@ -4,7 +4,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { Store, Bridge } from '../spoolman_bambu_bridge/app/core.mjs';
+import { Store, Bridge, bambuCreateBody } from '../spoolman_bambu_bridge/app/core.mjs';
 import { analyzeGcode, proposeAbort, gramsFromMm } from '../spoolman_bambu_bridge/app/usage.mjs';
 import { createApp } from '../spoolman_bambu_bridge/app/server.mjs';
 
@@ -91,11 +91,12 @@ test('dubbele koppeling wordt geweigerd; ontkoppelen laat rollen intact', async 
 test('aanmaken in Bambu: markering, geen duplicaat bij onzekere reactie of herhaling', async () => {
   const t = await setup({ spools: [spool(1, 321.4)], failCreate: 'uncertain' });
   const l = await t.bridge.createBambuFor(1);
-  assert.equal(t.bambu.creates, 1); assert.equal(t.bambu.cloud[0].netWeight, 321); assert.match(t.bambu.cloud[0].note, /\[spoolman:1\]/);
+  assert.equal(t.bambu.creates, 1); assert.equal(t.bambu.cloud[0].netWeight, 321); assert.equal(t.bambu.cloud[0].filamentName, 'PLA Wit'); assert.equal(t.bambu.cloud[0].color, '#FFFFFFFF'); assert.match(t.bambu.cloud[0].note, /\[spoolman:1\]/);
   assert.equal(String(l.bambuId), String(t.bambu.cloud[0].id));
   await t.bridge.removeLink(l.id);
   await t.bridge.createBambuFor(1); // hergebruikt bestaande gemarkeerde rol
   assert.equal(t.bambu.creates, 1);
+  assert.equal(bambuCreateBody({ material: 'PLA', name: 'PLA C220 Wit', colorHex: 'fff' , initialWeight: 1000, remainingWeight: 5 }, 'm').filamentName, 'PLA C220 Wit');
   t.close();
 });
 

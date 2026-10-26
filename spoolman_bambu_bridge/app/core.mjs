@@ -5,7 +5,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-export const VERSION = '0.2.5';
+export const VERSION = '0.2.6';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -173,10 +173,11 @@ export function bambuCreateBody(spool, marker) {
     createType: 'manual',
     filamentVendor: spool.brand || '',
     filamentType: material,
-    filamentName: spool.name ? `${material} ${spool.name}`.slice(0, 60) : material,
+    // Materiaal alleen voorvoegen als de naam er nog niet mee begint (voorkomt "PLA PLA ...").
+    filamentName: spool.name ? (spool.name.toUpperCase().startsWith(material.toUpperCase()) ? spool.name : `${material} ${spool.name}`).slice(0, 60) : material,
     filamentId: '',
     isSupport: false,
-    color: (spool.colorHex || '888888').slice(0, 6),
+    color: `#${(spool.colorHex || '888888').slice(0, 6).toUpperCase()}FF`, // zelfde notatie als Bambu zelf (#RRGGBBAA)
     colorType: 2,
     totalNetWeight: total,
     netWeight: Math.max(0, Math.round(spool.remainingWeight ?? 0)),
