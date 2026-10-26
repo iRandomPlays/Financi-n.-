@@ -5,7 +5,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.2.1';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -264,6 +264,13 @@ export class Bridge {
       if (cands.length) suggestions.push({ spoolmanId: sp.id, bambuId: cands[0].id, confidence: cands.length === 1 ? 'laag' : 'dubbelzinnig', reason: `kleur+materiaal, ${cands.length} kandidaat/kandidaten`, candidates: cands.map((c) => c.id) });
     }
     return { spools, cloud, links: this.s.links, suggestions };
+  }
+
+  async spoolmanCheck() {
+    try {
+      const spools = await this.spoolman().listSpools();
+      return { ok: true, count: spools.length, active: spools.filter((x) => !x.archived).length };
+    } catch (e) { return { ok: false, error: e.message }; }
   }
 
   async addLink(spoolmanId, bambuId) {

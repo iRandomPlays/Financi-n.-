@@ -32,6 +32,7 @@ export function createApp({ bridge, ingressOnly = false, publicDir = path.join(h
         if (route === 'POST /api/bambu/login') return send(200, await bridge.login(body.email, body.password));
         if (route === 'POST /api/bambu/verify') return send(200, await bridge.verify(String(body.code || '')));
         if (route === 'POST /api/bambu/logout') { await bridge.logout(); return send(200, { ok: true }); }
+        if (route === 'GET /api/spoolman') return send(200, await bridge.spoolmanCheck());
         if (route === 'GET /api/overview') return send(200, await bridge.overview());
         if (route === 'POST /api/links') return send(200, await bridge.addLink(body.spoolmanId, body.bambuId));
         if (route === 'POST /api/links/create-bambu') return send(200, await bridge.createBambuFor(body.spoolmanId));

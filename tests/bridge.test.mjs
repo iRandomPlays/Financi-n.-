@@ -161,3 +161,11 @@ test('gcode: absolute extrusie met G92-reset', () => {
   const a = analyzeGcode('M82\nG1 E5\nG1 E10\nG92 E0\nG1 E4');
   assert.equal(a.filaments[0].mm, 14);
 });
+
+test('spoolman-statuscontrole meldt aantal rollen of fout', async () => {
+  const t = await setup({ spools: [spool(1, 10), spool(2, 5, { archived: true })] });
+  assert.deepEqual(await t.bridge.spoolmanCheck(), { ok: true, count: 2, active: 1 });
+  t.store.state.settings.spoolmanUrl = 'http://127.0.0.1:1';
+  assert.equal((await t.bridge.spoolmanCheck()).ok, false);
+  t.close();
+});

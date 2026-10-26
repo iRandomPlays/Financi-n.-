@@ -17,7 +17,9 @@ async function refresh() {
   $('url').value = s.settings.spoolmanUrl; $('interval').value = s.settings.intervalSeconds; $('auto').checked = s.settings.autoSync;
   const b = s.bambu.status;
   const bl = { connected: 'verbonden', disconnected: 'niet ingelogd', pending_code: 'wacht op code', expired: 'sessie verlopen, log opnieuw in' }[b] || b;
-  $('conn').innerHTML = `<div>Bambu: <b class="${b === 'connected' ? '' : 'warn'}">${esc(bl)}</b> ${esc(s.bambu.email)}</div><div>Spoolman: ${s.settings.spoolmanUrl ? esc(s.settings.spoolmanUrl) : '<span class="warn">niet ingesteld</span>'}</div>`;
+  const sm = s.settings.spoolmanUrl ? await api('spoolman').catch(() => ({ ok: false, error: 'geen antwoord' })) : null;
+  const smTxt = !sm ? '<span class="warn">niet ingesteld</span>' : sm.ok ? `<b>verbonden</b> (${sm.active} actieve rollen)` : `<b class="bad">geen verbinding: ${esc(sm.error)}</b>`;
+  $('conn').innerHTML = `<div>Bambu: <b class="${b === 'connected' ? '' : 'warn'}">${esc(bl)}</b> ${esc(s.bambu.email)}</div><div>Spoolman: ${smTxt}</div>`;
   $('loginForm').hidden = b === 'connected' || b === 'pending_code'; $('codeForm').hidden = b !== 'pending_code'; $('logout').hidden = b !== 'connected';
   $('last').textContent = s.lastRound ? `Laatste ronde ${new Date(s.lastRound.at).toLocaleString('nl-NL')}: ${s.lastRound.updated} bijgewerkt, ${s.lastRound.unchanged} ongewijzigd, ${s.lastRound.paused} gepauzeerd, ${s.lastRound.failed} mislukt` : 'Nog niet gesynchroniseerd.';
   $('links').innerHTML = s.links.length ? s.links.map((l) => `<div class="item"><span>Spoolman #${l.spoolmanId} ↔ Bambu ${esc(l.bambuId)}
