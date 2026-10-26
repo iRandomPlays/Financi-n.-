@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spoolman Bambu Bridge</title><link rel="stylesheet" href="style.css"></head>
+<body><main>
+<h1>Spoolman Bambu Bridge <small id="ver"></small></h1>
+<section><h2>Verbindingen</h2><div id="conn"></div>
+<label>Spoolman-URL <input id="url" placeholder="http://homeassistant.local:7912"></label>
+<label>Interval (s) <input id="interval" type="number" min="30" max="3600"></label>
+<label class="row"><input id="auto" type="checkbox"> Automatisch synchroniseren</label>
+<button id="save">Opslaan</button></section>
+<section id="login"><h2>Bambu-account</h2>
+<div id="loginForm"><input id="email" type="email" placeholder="E-mail" autocomplete="off"><input id="pw" type="password" placeholder="Wachtwoord" autocomplete="off"><button id="doLogin">Inloggen</button></div>
+<div id="codeForm" hidden><input id="code" placeholder="Verificatiecode" inputmode="numeric"><button id="doVerify">Bevestigen</button></div>
+<button id="logout" hidden>Uitloggen</button></section>
+<section><h2>Koppelingen</h2><button id="sync">Nu synchroniseren</button><div id="last"></div><div id="links"></div></section>
+<section><h2>Rollen koppelen</h2><button id="load">Rollen laden</button><div id="suggest"></div><div id="spools"></div></section>
+<section><h2>Recente activiteit</h2><ul id="activity"></ul></section>
+<div id="msg" role="status"></div>
+</main><script src="ui.js"></script></body></html>

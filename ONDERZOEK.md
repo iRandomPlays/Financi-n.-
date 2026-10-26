@@ -1,0 +1,55 @@
+# Onderzoek en status
+
+## Gevonden in jouw Home Assistant (alleen gelezen, niets gewijzigd)
+| Onderdeel | Versie / status |
+|---|---|
+| Home Assistant | 2026.10.2, Europe/Amsterdam |
+| Spoolman-Ingress (bytenoodle) | 0.27.0-0, draait; Ingress-poort 7912, geen directe poort |
+| SpoolmanSync-add-on | 1.6.14, draait |
+| Bambu Lab-integratie (`bambu_lab`) | geladen; printer-serienummer 20P9BJ620700578 (model/firmware niet uitgelezen) |
+| SpoolmanSync-automations | `Tray Change` en `Update Spool` actief voor deze printer |
+| Spoolman Bambu Bridge | niet geïnstalleerd |
+
+## Hoe SpoolmanSync (1.6.14) Bambu-verbruik berekent (broncode `ha-config-generator.ts`)
+- Sensor "Filament Usage" = `print_weight / 100 × print_progress` (het **geplande** gewicht uit de slicer × voortgang). Dit is een schatting, geen gemeten extrusie.
+- Een utility meter telt dit op; de waarde wordt afgeboekt via webhook (`used_weight`) op de actieve tray bij een traywissel of printeinde (`finished`/`idle`), en bij 2 minuten offline wordt de meter gereset.
+- Gevolg: een print gestopt op 25% boekt ongeveer 25% van het geplande gewicht, niet het werkelijke verbruik. Spoelverbruik bij kleurwisselingen en laagverschillen zitten er niet in. Dit is gelezen uit de code, nog niet op jouw printer getest.
+- Bij meerdere kleuren hangt de juistheid af van het moment van traywissel; de voortgang loopt door over alle tools.
+
+## Bambu Filament Manager (cloud, niet-openbare API, uit cgradl/filament-manager)
+- Basis: `https://api.bambulab.com/v1/design-user-service/my/filament/v2` (GET lijst, POST aanmaken, PUT bijwerken met `id` in body, vereist `filamentName`).
+- Login: `/v1/user-service/user/login`, e-mailcode via `sendemail/code`, authenticator via `tfa/login`.
+- Deze endpoints zijn niet door mij tegen een echt account geverifieerd; ze komen uit de broncode van een derde.
+
+## G-code en gedeeltelijk verbruik (antwoorden op de vragen uit de opdracht)
+| Vraag | Stand |
+|---|---|
+| 1-2 Bestand verkrijgen (printeropslag, cloud, slicer) | Niet onderzocht op jouw printer. Kandidaten: `.3mf` via FTPS op de printer, Bambu Cloud-taak (`/my/tasks`), of de slicer zelf. |
+| 3 Extrusie/wissels leesbaar | Ja in model-G-code (E-waarden, `T<n>`, `M620 S<n>A`); geïmplementeerd in `usage.mjs`, getest met synthetische G-code. |
+| 4-5 Positie in bestand | Alleen laag, tijd of voortgang bekend via de HA-integratie; een bestandsregel is niet aangetoond. Daarom is de onzekerheid één laag. |
+| 6 Filamentnummer → AMS-slot | Niet geverifieerd; vereist het `ams_mapping` van de gestarte print. |
+| 7 Verbruik door firmware/macro's | Laden, ontladen en spoelen zijn niet volledig zichtbaar in model-G-code; `usage.mjs` telt ze niet mee en meldt dat. |
+
+`POST /api/estimate` geeft een **voorstel** (`kind: schatting`, bron, onzekerheid, `requiresConfirmation: true`). Er wordt niets in Spoolman geboekt.
+
+## Teststatus
+| Onderdeel | Status |
+|---|---|
+| Synchronisatie, koppelen, aanmaken zonder duplicaat, pauzeren, herstel, interval, Ingress-weigering, G-code-analyse | **Lokaal getest met gesimuleerde diensten** (12 tests geslaagd) |
+| Gewicht afronden, state na herstart | Lokaal getest |
+| Installatie als lokale add-on, Ingress, mobiele UI | **Nog niet geverifieerd** (geschreven, niet in Home Assistant of browser gedraaid) |
+| Bambu-login en Filament Manager-API met echt account | **Nog niet geverifieerd** |
+| Rol zichtbaar in Studio/Handy, selectie op AMS-slot of printerscherm | **Nog niet geverifieerd**; cloudsynchronisatie bewijst dit niet |
+| Verbruik normale/meerkleuren/afgebroken print, weegtests | **Nog niet geverifieerd** |
+
+## Bekende beperkingen
+- Geen schrijven naar Spoolman, geen tweerichtingssync, geen verwijderen van lege Bambu-rollen.
+- SpoolmanSync is niet aangepast. Het afgebroken-printprobleem vraagt een wijziging of aanvullende automatisering die pas na praktijkmeting van jouw printer zinvol is.
+- Bridge 0.2.0 is een herbouw volgens de opdracht; de oorspronkelijke 0.1.0-code (inclusief de 17 tests) was niet beschikbaar en is niet vergeleken.
+- Het ZIP staat niet in de repository; bouw met `git archive` (zie hieronder).
+
+## Volgende stappen (vereisen jouw omgeving)
+1. Bridge installeren, Spoolman-URL bepalen, back-up van Spoolman maken.
+2. Eén rol koppelen en handmatig synchroniseren; resultaat in Studio/Handy bekijken.
+3. Testprint van 1 kleur, daarna meerkleuren en een bewust geannuleerde print; wegen en vergelijken met SpoolmanSync (let op leeg rolgewicht en weegschaalnauwkeurigheid).
+4. Pas daarna bepalen of de G-code-route (of firmware-`ams_mapping`) SpoolmanSync moet aanvullen.

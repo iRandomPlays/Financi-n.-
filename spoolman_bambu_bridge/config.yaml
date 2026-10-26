@@ -1,0 +1,15 @@
+name: "Spoolman Bambu Bridge"
+version: "0.2.0"
+slug: spoolman_bambu_bridge
+description: "Synchroniseert resterende grammen van Spoolman naar Bambu's Filament Manager"
+url: "https://example.invalid/spoolman-bambu-bridge"
+arch: [amd64, aarch64]
+init: false
+startup: application
+boot: auto
+ingress: true
+ingress_port: 8099
+ingress_entry: /
+panel_icon: mdi:printer-3d-nozzle
+panel_title: "Bambu Bridge"
+map: []
