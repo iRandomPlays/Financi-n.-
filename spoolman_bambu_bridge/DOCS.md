@@ -17,6 +17,8 @@ De bridge boekt **geen** printverbruik af; dat doet SpoolmanSync. Hij leest geen
 - Handmatig ontkoppelen verwijdert geen rol. Een ronde draait nooit dubbel; mislukte updates gaan de volgende ronde opnieuw met de nieuwste stand.
 - Een aangemaakte Bambu-rol krijgt `[spoolman:ID]` in de notitie. Na een onzekere netwerkreactie wordt daarop gezocht in plaats van opnieuw aan te maken.
 
+- Optioneel (instelling): een nieuwe Spoolman-rol met bekend gewicht wordt automatisch in Bambu aangemaakt en gekoppeld. Bestaat dezelfde rol al los in Bambu, dan ontstaat er een tweede; koppel die dan handmatig vóór je de rol in Spoolman toevoegt.
+
 ## Back-up en herstel
 - Gegevens staan in `/data/state.json` en zitten in de normale Home Assistant-back-up van de add-on.
 - Update: vervang de map, laad de store opnieuw, werk de add-on bij; `/data` blijft behouden.

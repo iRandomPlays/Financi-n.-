@@ -5,7 +5,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-export const VERSION = '0.2.4';
+export const VERSION = '0.2.5';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -51,7 +51,7 @@ async function request(url, { method = 'GET', headers = {}, body, timeoutMs = 20
 
 const EMPTY_STATE = () => ({
   version: 1,
-  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, region: 'us' },
+  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, region: 'us' },
   bambu: { token: '', email: '', status: 'disconnected' },
   links: [], // { id, spoolmanId, bambuId, paused, pauseReason, lastSyncedGrams, lastSyncAt, lastError, createdAt }
   pendingCreates: [], // { spoolmanId, marker, startedAt }
@@ -217,6 +217,7 @@ export class Bridge {
       st.intervalSeconds = n;
     }
     if (patch.autoSync !== undefined) st.autoSync = !!patch.autoSync;
+    if (patch.autoCreate !== undefined) st.autoCreate = !!patch.autoCreate;
     if (patch.region !== undefined) st.region = BAMBU_HOSTS[patch.region] ? patch.region : 'us';
     await this.store.save();
     this.schedule();
@@ -372,6 +373,15 @@ export class Bridge {
         } catch (e) {
           link.lastError = e.message; result.failed++; // volgende ronde opnieuw met nieuwste Spoolman-stand
           this.store.log('error', `Koppeling Spoolman #${link.spoolmanId}: ${e.message}`);
+        }
+      }
+      if (this.s.settings.autoCreate && spools.length > 0) {
+        // Nieuwe Spoolman-rollen automatisch in Bambu aanmaken (max. 5 per ronde); herkenning via [spoolman:ID].
+        const linked = new Set(this.s.links.map((l) => l.spoolmanId));
+        const fresh = spools.filter((x) => !x.archived && !linked.has(x.id) && x.remainingWeight != null && x.remainingWeight > 0).slice(0, 5);
+        for (const sp of fresh) {
+          try { await this.createBambuFor(sp.id); result.created = (result.created || 0) + 1; }
+          catch (e) { result.failed++; this.store.log('error', `Automatisch aanmaken Spoolman #${sp.id}: ${e.message}`); }
         }
       }
       for (const l of removed) {

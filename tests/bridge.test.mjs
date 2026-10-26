@@ -179,3 +179,13 @@ test('lege Spoolman-lijst ontkoppelt niets maar pauzeert', async () => {
   assert.equal(r.unlinked, undefined); assert.equal(r.paused, 1); assert.equal(t.store.state.links.length, 1); assert.equal(t.bambu.deleted, undefined);
   t.close();
 });
+
+test('autoCreate maakt nieuwe Spoolman-rollen aan in Bambu, zonder dubbele aanmaak in volgende ronde', async () => {
+  const t = await setup({ spools: [spool(1, 500), spool(2, 0), spool(3, 100, { archived: true })] });
+  let r = await t.bridge.syncOnce(); assert.equal(r.created, undefined); assert.equal(t.bambu.creates, 0); // standaard uit
+  t.store.state.settings.autoCreate = true;
+  r = await t.bridge.syncOnce(); assert.equal(r.created, 1); assert.equal(t.bambu.creates, 1);
+  r = await t.bridge.syncOnce(); assert.equal(r.created, undefined); assert.equal(t.bambu.creates, 1);
+  assert.equal(t.store.state.links.length, 1);
+  t.close();
+});
