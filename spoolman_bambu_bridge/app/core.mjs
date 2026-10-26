@@ -5,7 +5,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-export const VERSION = '0.2.3';
+export const VERSION = '0.2.4';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -156,6 +156,9 @@ export class BambuClient {
   }
   async createFilament(body) {
     return request(this.filamentBase, { method: 'POST', headers: this.auth, body, fetchImpl: this.fetchImpl });
+  }
+  async deleteFilaments(ids) {
+    return request(`${this.filamentBase}/batch`, { method: 'DELETE', headers: this.auth, body: { ids: ids.map(Number) }, fetchImpl: this.fetchImpl });
   }
   // Bambu eist filamentName ook bij een gewichtsupdate; zonder wordt de naam leeggemaakt of de call geweigerd.
   async updateWeight(id, netWeight, filamentName) {
@@ -350,9 +353,12 @@ export class Bridge {
       for (const link of [...this.s.links]) {
         try {
           const sp = byS.get(link.spoolmanId); const bc = byB.get(String(link.bambuId));
-          // Verwijderde Spoolman-rol: koppeling vervalt, de Bambu-rol blijft staan. Bij een lege Spoolman-lijst
-          // (gewiste database?) niets ontkoppelen maar pauzeren.
-          if (!sp && spools.length > 0) { removed.push(link); continue; }
+          // Verwijderde Spoolman-rol: de gekoppelde Bambu-rol wordt ook verwijderd (Spoolman is leidend).
+          // Bij een lege Spoolman-lijst (gewiste database?) niets verwijderen maar pauzeren.
+          if (!sp && spools.length > 0) {
+            if (byB.has(String(link.bambuId))) await this.bambu().deleteFilaments([link.bambuId]);
+            removed.push(link); continue;
+          }
           if (!sp || sp.archived) { this.pause(link, !sp ? 'Spoolman-rol ontbreekt' : 'Spoolman-rol is gearchiveerd'); result.paused++; continue; }
           if (!bc) { this.pause(link, 'Bambu-rol ontbreekt'); result.paused++; continue; }
           if (sp.remainingWeight == null) { this.pause(link, 'Spoolman-rol heeft geen bekend gewicht'); result.paused++; continue; }
@@ -370,7 +376,7 @@ export class Bridge {
       }
       for (const l of removed) {
         this.s.links = this.s.links.filter((x) => x.id !== l.id);
-        this.store.log('info', `Spoolman #${l.spoolmanId} is verwijderd: koppeling met Bambu ${l.bambuId} opgeheven (Bambu-rol blijft staan)`);
+        this.store.log('info', `Spoolman #${l.spoolmanId} is verwijderd: Bambu-rol ${l.bambuId} verwijderd en koppeling opgeheven`);
         result.unlinked = (result.unlinked || 0) + 1;
       }
     } finally {

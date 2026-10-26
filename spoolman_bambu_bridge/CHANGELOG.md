@@ -1,5 +1,8 @@
 # Wijzigingen
 
+## 0.2.4
+- Een verwijderde Spoolman-rol verwijdert ook de gekoppelde Bambu-rol (alleen rollen die de bridge zelf had gekoppeld). Mislukt dat, dan blijft de koppeling staan en volgt een nieuwe poging. Bij een lege Spoolman-lijst gebeurt niets.
+
 ## 0.2.3
 - Een verwijderde Spoolman-rol heft de koppeling automatisch op (Bambu-rol blijft staan). Bij een lege Spoolman-lijst wordt alleen gepauzeerd. Gearchiveerde rollen blijven pauzeren.
 

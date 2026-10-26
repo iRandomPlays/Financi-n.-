@@ -20,6 +20,7 @@ async function setup({ spools, cloud = [], failCreate = null } = {}) {
     if (!req.url.includes('/my/filament/v2')) return json(res, 404, {});
     if (req.method === 'GET') return json(res, 200, { total: bambu.cloud.length, hits: bambu.cloud });
     const body = await readBody(req);
+    if (req.method === 'DELETE') { bambu.deleted = (bambu.deleted || []).concat(body.ids); bambu.cloud = bambu.cloud.filter((c) => !body.ids.includes(c.id)); return json(res, 200, {}); }
     if (req.method === 'PUT') { bambu.puts.push(body); const c = bambu.cloud.find((x) => x.id === body.id); if (c) c.netWeight = body.netWeight; return json(res, 200, {}); }
     if (req.method === 'POST') {
       bambu.creates++;
@@ -54,7 +55,7 @@ test('ontbrekend gewicht wordt niet als 0 gesynchroniseerd; gearchiveerd en ontb
   await t.bridge.addLink(1, 7); await t.bridge.addLink(2, 8); await t.bridge.addLink(3, 9);
   const r = await t.bridge.syncOnce();
   assert.equal(r.unlinked, 1); assert.equal(r.paused, 2); assert.equal(t.bambu.puts.length, 0);
-  assert.equal(t.store.state.links.length, 2); assert.equal(t.bambu.cloud.length, 3); // Bambu-rol blijft staan
+  assert.equal(t.store.state.links.length, 2); assert.deepEqual(t.bambu.deleted, [9]); assert.equal(t.bambu.cloud.length, 2); // gekoppelde Bambu-rol verwijderd, de rest blijft
   assert.ok(t.store.state.links.every((l) => l.paused));
   t.close();
 });
@@ -175,6 +176,6 @@ test('lege Spoolman-lijst ontkoppelt niets maar pauzeert', async () => {
   const t = await setup({ spools: [], cloud: [{ id: 7, netWeight: 800 }] });
   await t.bridge.addLink(1, 7);
   const r = await t.bridge.syncOnce();
-  assert.equal(r.unlinked, undefined); assert.equal(r.paused, 1); assert.equal(t.store.state.links.length, 1);
+  assert.equal(r.unlinked, undefined); assert.equal(r.paused, 1); assert.equal(t.store.state.links.length, 1); assert.equal(t.bambu.deleted, undefined);
   t.close();
 });
