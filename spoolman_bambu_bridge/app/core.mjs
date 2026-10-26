@@ -5,7 +5,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-export const VERSION = '0.2.2';
+export const VERSION = '0.2.3';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -346,9 +346,13 @@ export class Bridge {
       }
       const byS = new Map(spools.map((s) => [s.id, s]));
       const byB = new Map(cloud.map((c) => [String(c.id), c]));
-      for (const link of this.s.links) {
+      const removed = [];
+      for (const link of [...this.s.links]) {
         try {
           const sp = byS.get(link.spoolmanId); const bc = byB.get(String(link.bambuId));
+          // Verwijderde Spoolman-rol: koppeling vervalt, de Bambu-rol blijft staan. Bij een lege Spoolman-lijst
+          // (gewiste database?) niets ontkoppelen maar pauzeren.
+          if (!sp && spools.length > 0) { removed.push(link); continue; }
           if (!sp || sp.archived) { this.pause(link, !sp ? 'Spoolman-rol ontbreekt' : 'Spoolman-rol is gearchiveerd'); result.paused++; continue; }
           if (!bc) { this.pause(link, 'Bambu-rol ontbreekt'); result.paused++; continue; }
           if (sp.remainingWeight == null) { this.pause(link, 'Spoolman-rol heeft geen bekend gewicht'); result.paused++; continue; }
@@ -363,6 +367,11 @@ export class Bridge {
           link.lastError = e.message; result.failed++; // volgende ronde opnieuw met nieuwste Spoolman-stand
           this.store.log('error', `Koppeling Spoolman #${link.spoolmanId}: ${e.message}`);
         }
+      }
+      for (const l of removed) {
+        this.s.links = this.s.links.filter((x) => x.id !== l.id);
+        this.store.log('info', `Spoolman #${l.spoolmanId} is verwijderd: koppeling met Bambu ${l.bambuId} opgeheven (Bambu-rol blijft staan)`);
+        result.unlinked = (result.unlinked || 0) + 1;
       }
     } finally {
       this.running = false;

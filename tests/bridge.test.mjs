@@ -53,7 +53,8 @@ test('ontbrekend gewicht wordt niet als 0 gesynchroniseerd; gearchiveerd en ontb
   delete t.sm.spools[0].remaining_weight;
   await t.bridge.addLink(1, 7); await t.bridge.addLink(2, 8); await t.bridge.addLink(3, 9);
   const r = await t.bridge.syncOnce();
-  assert.equal(r.paused, 3); assert.equal(t.bambu.puts.length, 0);
+  assert.equal(r.unlinked, 1); assert.equal(r.paused, 2); assert.equal(t.bambu.puts.length, 0);
+  assert.equal(t.store.state.links.length, 2); assert.equal(t.bambu.cloud.length, 3); // Bambu-rol blijft staan
   assert.ok(t.store.state.links.every((l) => l.paused));
   t.close();
 });
@@ -167,5 +168,13 @@ test('spoolman-statuscontrole meldt aantal rollen of fout', async () => {
   assert.deepEqual(await t.bridge.spoolmanCheck(), { ok: true, count: 2, active: 1 });
   t.store.state.settings.spoolmanUrl = 'http://127.0.0.1:1';
   assert.equal((await t.bridge.spoolmanCheck()).ok, false);
+  t.close();
+});
+
+test('lege Spoolman-lijst ontkoppelt niets maar pauzeert', async () => {
+  const t = await setup({ spools: [], cloud: [{ id: 7, netWeight: 800 }] });
+  await t.bridge.addLink(1, 7);
+  const r = await t.bridge.syncOnce();
+  assert.equal(r.unlinked, undefined); assert.equal(r.paused, 1); assert.equal(t.store.state.links.length, 1);
   t.close();
 });

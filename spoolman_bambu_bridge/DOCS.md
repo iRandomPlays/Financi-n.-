@@ -13,7 +13,7 @@ De bridge boekt **geen** printverbruik af; dat doet SpoolmanSync. Hij leest geen
 
 ## Werking
 - Spoolman is leidend. Per ronde: doelgewicht = Spoolman-resterend, afgerond op hele grammen; alleen schrijven als Bambu afwijkt.
-- Rollen met onbekend gewicht, ontbrekende of gearchiveerde bronrol worden zichtbaar gepauzeerd (nooit 0 g).
+- Rollen met onbekend gewicht of een gearchiveerde bronrol worden zichtbaar gepauzeerd (nooit 0 g). Verwijder je een rol in Spoolman, dan vervalt de koppeling automatisch; de Bambu-rol blijft staan. Is de hele Spoolman-lijst leeg, dan wordt er niets ontkoppeld maar gepauzeerd.
 - Ontkoppelen verwijdert geen rol. Een ronde draait nooit dubbel; mislukte updates gaan de volgende ronde opnieuw met de nieuwste stand.
 - Een aangemaakte Bambu-rol krijgt `[spoolman:ID]` in de notitie. Na een onzekere netwerkreactie wordt daarop gezocht in plaats van opnieuw aan te maken.
 
