@@ -61,3 +61,24 @@ export async function addRfidSpool(sm, t) {
   }
   return { spoolId: spool.id, filamentId: fil.id, name: `${t.brand} ${t.name}`, weight: t.weight };
 }
+
+// SpoolmanSync koppelt een rol alleen op het moment dat je hem in de AMS plaatst. Een rol die wij pas daarna toevoegen,
+// zetten we zelf in zijn vak: extra.active_tray = unique_id van het vak (JSON-tekst), zoals SpoolmanSync dat ook bewaart.
+// Alleen als de rol nog niet in een vak staat en het vak nog door geen andere rol wordt gebruikt.
+export async function assignTrays(sm, ha, trays, spools) {
+  const byTag = new Map();
+  for (const s of spools) { const k = normalizeTag(s.rfid); if (k && !s.archived && !byTag.has(k)) byTag.set(k, s); }
+  const used = new Set(spools.filter((s) => !s.archived && s.tray).map((s) => s.tray));
+  const todo = trays.map((t) => ({ t, spool: byTag.get(t.uuid) })).filter((x) => x.spool && !x.spool.tray);
+  if (!todo.length) return [];
+  const ids = await ha.trayUniqueIds();
+  const done = [];
+  for (const { t, spool } of todo) {
+    const uid = ids.get(t.entityId);
+    if (!uid || used.has(uid)) continue;
+    const raw = await sm.getSpool(spool.id);
+    await sm.patchSpool(spool.id, { extra: { ...(raw.extra || {}), active_tray: JSON.stringify(uid) } });
+    used.add(uid); spool.tray = uid; done.push({ spoolId: spool.id, entityId: t.entityId });
+  }
+  return done;
+}

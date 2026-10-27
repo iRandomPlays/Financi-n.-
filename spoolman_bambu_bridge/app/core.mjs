@@ -8,9 +8,9 @@ import { HaPublisher, buildStates, STATUS_ID } from './publish.mjs';
 import { fetchUsageLogs, ingest, historyState } from './history.mjs';
 import { quickAdd, catalog } from './quickadd.mjs';
 import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
-import { rfidTrays, normalizeTag, addRfidSpool } from './rfid.mjs';
+import { rfidTrays, normalizeTag, addRfidSpool, assignTrays } from './rfid.mjs';
 
-export const VERSION = '0.8.0';
+export const VERSION = '0.8.1';
 export const RFID_INTERVAL = 60;
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
@@ -130,6 +130,8 @@ export class SpoolmanClient {
   async createFilament(b) { return request(`${this.base}/api/v1/filament`, { method: 'POST', body: b, fetchImpl: this.fetchImpl }); }
   async createSpool(b) { return request(`${this.base}/api/v1/spool`, { method: 'POST', body: b, fetchImpl: this.fetchImpl }); }
   async ping() { await request(`${this.base}/api/v1/health`, { fetchImpl: this.fetchImpl }); }
+  async getSpool(id) { return request(`${this.base}/api/v1/spool/${id}`, { fetchImpl: this.fetchImpl }); }
+  async patchSpool(id, b) { return request(`${this.base}/api/v1/spool/${id}`, { method: 'PATCH', body: b, fetchImpl: this.fetchImpl }); }
   // Zorgt dat een extra tekstveld voor rollen bestaat (bijv. "tag"); bestaat het al, dan verandert er niets.
   async ensureSpoolField(key, name) {
     const fields = await request(`${this.base}/api/v1/field/spool`, { fetchImpl: this.fetchImpl });
@@ -603,25 +605,32 @@ export class Bridge {
     const set = this.s.settings;
     if (!set.rfidAutoAdd || !set.spoolmanUrl || !this.ha.enabled || this.rfidRunning) return { skipped: true };
     this.rfidRunning = true;
-    const result = { added: 0, known: 0, failed: 0 };
+    const result = { added: 0, known: 0, failed: 0, assigned: 0 };
     try {
       const trays = rfidTrays(await this.ha.listStates(), set.printerPrefix);
       if (!trays.length) return result;
       const sm = this.spoolman();
-      const known = new Set((await sm.listSpools()).map((x) => normalizeTag(x.rfid)).filter(Boolean));
+      const spools = await sm.listSpools();
+      const known = new Set(spools.map((x) => normalizeTag(x.rfid)).filter(Boolean));
       for (const t of trays) {
         if (known.has(t.uuid)) { result.known++; continue; }
         try {
           const r = await addRfidSpool(sm, t);
           known.add(t.uuid); result.added++;
+          spools.push({ id: r.spoolId, archived: false, rfid: JSON.stringify(t.uuid), tray: '' });
           this.store.log('info', `Bambu-rol uit de AMS toegevoegd: Spoolman #${r.spoolId} ${r.name} ${r.weight} g (${t.entityId})`);
         } catch (e) {
           result.failed++; this.logOnce(`rfid-${t.uuid}`, `RFID-rol ${t.name} (${t.entityId}) toevoegen mislukt: ${e.message}`);
         }
       }
-      if (result.added) {
+      try {
+        for (const a of await assignTrays(sm, this.ha, trays, spools)) {
+          result.assigned++; this.store.log('info', `Spoolman #${a.spoolId} gekoppeld aan AMS-vak ${a.entityId}`);
+        }
+      } catch (e) { this.logOnce('rfid-assign', `Rol aan AMS-vak koppelen mislukt: ${e.message}`); }
+      if (result.added || result.assigned) {
         await this.store.save();
-        if (set.autoCreate && this.s.bambu.token) this.syncOnce('nieuwe rol').catch(() => {});
+        if (result.added && set.autoCreate && this.s.bambu.token) this.syncOnce('nieuwe rol').catch(() => {});
       }
     } catch (e) {
       this.logOnce('rfid-round', `RFID-controle mislukt: ${e.message}`);

@@ -130,3 +130,26 @@ test('rfidRound doet niets als de instelling uit staat, Home Assistant ontbreekt
   assert.ok(r.error); assert.equal(db.spools.length, 0);
   srv.close(); ha.close();
 });
+
+test('rfidRound zet de nieuwe rol zelf in zijn AMS-vak (active_tray), zonder een bezet vak over te nemen', async () => {
+  const { db, srv } = await fakeSpoolman(); const ha = await fakeHa([tray()]);
+  const UID = 'X2D_20P9BJ620700578_AMS_19C51A62090007W_tray_2';
+  const orig = srv.listeners('request')[0]; srv.removeAllListeners('request');
+  srv.on('request', async (req, res) => {
+    const m = req.url.match(/^\/api\/v1\/spool\/(\d+)$/);
+    if (m && req.method === 'GET') return json(res, 200, db.spools.find((s) => s.id === +m[1]));
+    if (m && req.method === 'PATCH') { const b = await readBody(req); const s = db.spools.find((x) => x.id === +m[1]); s.extra = b.extra; return json(res, 200, s); }
+    return orig(req, res);
+  });
+  for (const taken of [false, true]) {
+    db.spools.length = 0;
+    if (taken) db.spools.push({ id: 9, extra: { tag: '"x"', active_tray: JSON.stringify(UID) }, filament: { vendor: { name: 'Sunlu' }, material: 'PLA', name: 'y', color_hex: '000000' }, initial_weight: 1000 });
+    const b = await bridgeWith(url(srv), url(ha));
+    b.ha.trayUniqueIds = async () => new Map([['sensor.x2d_20p9bj620700578_ams_1_tray_2', UID]]);
+    const r = await b.rfidRound();
+    const mine = db.spools.find((s) => s.id !== 9);
+    if (taken) { assert.equal(r.assigned, 0); assert.equal(mine.extra.active_tray, undefined); }
+    else { assert.equal(r.assigned, 1); assert.equal(JSON.parse(mine.extra.active_tray), UID); assert.equal(JSON.parse(mine.extra.tag), UUID.toLowerCase()); assert.equal((await b.rfidRound()).assigned, 0); }
+  }
+  srv.close(); ha.close();
+});

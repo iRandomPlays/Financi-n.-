@@ -1,5 +1,8 @@
 # Wijzigingen
 
+## 0.8.1
+- Een automatisch toegevoegde Bambu-rol wordt door de bridge zelf aan zijn AMS-vak gekoppeld (`extra.active_tray` in Spoolman, met het unique_id uit het entiteitenregister van Home Assistant). SpoolmanSync deed dat alleen op het moment van plaatsen. Alleen als de rol nog niet in een vak staat en het vak vrij is.
+
 ## 0.8.0
 - Originele Bambu-rollen met RFID worden automatisch in Spoolman gezet. Elke minuut leest de bridge de AMS-vakken uit Home Assistant (sensoren met `tray_uuid` en `tag_uid`); staat het RFID-nummer nog niet in `extra.tag` van een rol, dan maakt de bridge de rol aan (leverancier Bambu Lab, filament uit naam, materiaal en kleur van het vak, gewicht en verbruikt gewicht uit `tray_weight` en `remain`). SpoolmanSync herkent de rol daarna aan het RFID-nummer. Rollen zonder chip (Sunlu e.d.) worden genegeerd, gearchiveerde rollen tellen mee als bestaand. Instelling `rfidAutoAdd` (standaard aan); het extra veld `tag` wordt zo nodig in Spoolman aangemaakt.
 
