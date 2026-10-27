@@ -6,6 +6,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { Store, Bridge, bambuCreateBody } from '../spoolman_bambu_bridge/app/core.mjs';
 import { analyzeGcode, proposeAbort, gramsFromMm } from '../spoolman_bambu_bridge/app/usage.mjs';
+import { buildStates, HaPublisher } from '../spoolman_bambu_bridge/app/publish.mjs';
 import { createApp } from '../spoolman_bambu_bridge/app/server.mjs';
 
 const listen = (handler) => new Promise((res) => { const s = http.createServer(handler); s.listen(0, '127.0.0.1', () => res(s)); });
@@ -189,4 +190,35 @@ test('autoCreate maakt nieuwe Spoolman-rollen aan in Bambu, zonder dubbele aanma
   r = await t.bridge.syncOnce(); assert.equal(r.created, undefined); assert.equal(t.bambu.creates, 1);
   assert.equal(t.store.state.links.length, 1);
   t.close();
+});
+
+test('publicatie naar HA: rolsensoren, samenvatting, lage voorraad, opruimen en geen opruiming bij Spoolman-storing', async () => {
+  const calls = [];
+  const haSrv = await listen(async (req, res) => { calls.push([req.method, req.url, req.headers.authorization, req.method === 'POST' ? await readBody(req) : null]); json(res, 200, {}); });
+  const t = await setup({ spools: [spool(1, 40), spool(2, 900)] });
+  t.bridge.ha = new HaPublisher({ baseUrl: `http://127.0.0.1:${haSrv.address().port}/api`, token: 'tok' });
+  await t.bridge.addLink(1, 7);
+  await t.bridge.syncOnce();
+  const posted = Object.fromEntries(calls.filter((c) => c[0] === 'POST').map((c) => [c[1], c[3]]));
+  assert.equal(posted['/api/states/sensor.spoolman_rol_1'].state, 40);
+  assert.equal(posted['/api/states/sensor.spoolman_rol_1'].attributes.laag, true);
+  assert.equal(posted['/api/states/sensor.spoolman_rol_2'].attributes.sync, 'niet gekoppeld');
+  assert.equal(posted['/api/states/sensor.spoolman_voorraad'].state, 940);
+  assert.equal(posted['/api/states/sensor.spoolman_voorraad'].attributes.laag_aantal, 1);
+  assert.equal(calls[0][2], 'Bearer tok');
+  // rol 2 verdwijnt uit Spoolman: sensor wordt opgeruimd
+  calls.length = 0; t.sm.spools.pop();
+  await t.bridge.syncOnce();
+  assert.ok(calls.some((c) => c[0] === 'DELETE' && c[1].endsWith('sensor.spoolman_rol_2')));
+  // Spoolman onbereikbaar: alleen status, geen DELETE
+  calls.length = 0; t.store.state.settings.spoolmanUrl = 'http://127.0.0.1:1';
+  await t.bridge.syncOnce();
+  assert.ok(!calls.some((c) => c[0] === 'DELETE'));
+  assert.ok(calls.some((c) => c[1].endsWith('sensor.spoolman_bridge_status')));
+  haSrv.close(); t.close();
+});
+test('buildStates: onbekend gewicht blijft unknown en archief wordt overgeslagen', () => {
+  const st = buildStates({ spools: [{ id: 1, remainingWeight: null, archived: false, brand: 'A', name: 'x', material: 'PLA', colorHex: 'FFFFFF' }, { id: 2, remainingWeight: 5, archived: true }], links: [], bambuStatus: 'connected' });
+  assert.equal(st['sensor.spoolman_rol_1'].state, 'unknown'); assert.equal(st['sensor.spoolman_rol_2'], undefined);
+  assert.equal(st['sensor.spoolman_bridge_status'].state, 'ok');
 });

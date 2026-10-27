@@ -23,3 +23,6 @@ De bridge boekt **geen** printverbruik af; dat doet SpoolmanSync. Hij leest geen
 - Gegevens staan in `/data/state.json` en zitten in de normale Home Assistant-back-up van de add-on.
 - Update: vervang de map, laad de store opnieuw, werk de add-on bij; `/data` blijft behouden.
 - Herstel: back-up terugzetten, add-on starten. Controleer na een nieuwe Spoolman-database of -account de koppelingen vóór je automatisch synchroniseren aanzet (ontbrekende rollen worden gepauzeerd).
+
+## Sensoren in Home Assistant
+Elke ronde publiceert de bridge: `sensor.spoolman_rol_<id>` (resterende grammen met merk, materiaal, kleur, tray, sync-status), `sensor.spoolman_voorraad` (totaal, aantal lage rollen, lijst `rollen`) en `sensor.spoolman_bridge_status` (ok / pauze / fout / niet_ingelogd). Het zijn alleen-lezen sensoren zonder registratie; na een herstart van Home Assistant verschijnen ze bij de volgende ronde weer (maximaal één interval). Bij een Spoolman-storing worden alleen de status bijgewerkt en geen rolsensoren verwijderd.

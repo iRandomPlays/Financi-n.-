@@ -4,8 +4,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { HaPublisher, buildStates, STATUS_ID } from './publish.mjs';
 
-export const VERSION = '0.2.6';
+export const VERSION = '0.3.0';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -51,7 +52,7 @@ async function request(url, { method = 'GET', headers = {}, body, timeoutMs = 20
 
 const EMPTY_STATE = () => ({
   version: 1,
-  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, region: 'us' },
+  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, lowStockGrams: 100, region: 'us' },
   bambu: { token: '', email: '', status: 'disconnected' },
   links: [], // { id, spoolmanId, bambuId, paused, pauseReason, lastSyncedGrams, lastSyncAt, lastError, createdAt }
   pendingCreates: [], // { spoolmanId, marker, startedAt }
@@ -93,6 +94,11 @@ export class SpoolmanClient {
   async ping() { await request(`${this.base}/api/v1/health`, { fetchImpl: this.fetchImpl }); }
 }
 
+function parseExtra(v) {
+  if (typeof v !== 'string' || !v) return '';
+  try { const x = JSON.parse(v); return typeof x === 'string' ? x : ''; } catch { return v; }
+}
+
 export function normalizeSpoolmanSpool(s) {
   const f = s.filament || {};
   const remaining = typeof s.remaining_weight === 'number' ? s.remaining_weight : null; // null = onbekend, niet 0
@@ -107,6 +113,7 @@ export function normalizeSpoolmanSpool(s) {
     remainingWeight: remaining,
     location: s.location || '',
     rfid: s.extra?.rfid || s.extra?.tag || '',
+    tray: parseExtra(s.extra?.active_tray), // door SpoolmanSync gevuld (JSON-tekst in Spoolman)
   };
 }
 
@@ -194,6 +201,8 @@ export class Bridge {
     this.store = store; this.fetchImpl = fetchImpl;
     this.running = false; this.timer = null; this.lastRound = null;
     this.pendingLogin = null;
+    this.ha = new HaPublisher({ fetchImpl });
+    this.lastPublishError = '';
   }
   get s() { return this.store.state; }
   spoolman() {
@@ -219,6 +228,11 @@ export class Bridge {
     }
     if (patch.autoSync !== undefined) st.autoSync = !!patch.autoSync;
     if (patch.autoCreate !== undefined) st.autoCreate = !!patch.autoCreate;
+    if (patch.lowStockGrams !== undefined) {
+      const g = Math.round(Number(patch.lowStockGrams));
+      if (!Number.isFinite(g) || g < 0 || g > 1000) throw new HttpError('Grens voor lage voorraad moet tussen 0 en 1000 g liggen', 400);
+      st.lowStockGrams = g;
+    }
     if (patch.region !== undefined) st.region = BAMBU_HOSTS[patch.region] ? patch.region : 'us';
     await this.store.save();
     this.schedule();
@@ -339,6 +353,7 @@ export class Bridge {
     if (this.running) return { skipped: true, reason: 'ronde loopt al' };
     this.running = true;
     const result = { trigger, updated: 0, unchanged: 0, paused: 0, failed: 0 };
+    let lastSpools = null;
     try {
       let spools, cloud;
       try {
@@ -349,6 +364,7 @@ export class Bridge {
         result.error = e.message; result.failed = this.s.links.length;
         return result;
       }
+      lastSpools = spools;
       const byS = new Map(spools.map((s) => [s.id, s]));
       const byB = new Map(cloud.map((c) => [String(c.id), c]));
       const removed = [];
@@ -394,8 +410,26 @@ export class Bridge {
       this.running = false;
       this.lastRound = { at: new Date().toISOString(), ...result };
       await this.store.save().catch(() => {});
+      await this.publishToHa(lastSpools);
     }
     return result;
+  }
+  async publishToHa(spools) {
+    if (!this.ha.enabled) return;
+    try {
+      const list = spools || await this.spoolman().listSpools().catch(() => null);
+      if (!list) { // Spoolman onbereikbaar: alleen de status bijwerken, rolsensoren niet opruimen
+        const st = buildStates({ spools: [], links: this.s.links, bambuStatus: this.s.bambu.status, lastRound: this.lastRound, running: this.running });
+        await this.ha.publish({ [STATUS_ID]: st[STATUS_ID] }, { cleanup: false });
+        return;
+      }
+      // Verwijderde/gearchiveerde rollen worden door publish() opgeruimd; ze staan niet meer in 'states'.
+      await this.ha.publish(buildStates({ spools: list, links: this.s.links, lowStockGrams: this.s.settings.lowStockGrams, bambuStatus: this.s.bambu.status, lastRound: this.lastRound, running: this.running }));
+      this.lastPublishError = '';
+    } catch (e) {
+      if (this.lastPublishError !== e.message) this.store.log('warn', `Publiceren naar Home Assistant mislukt: ${e.message}`);
+      this.lastPublishError = e.message;
+    }
   }
   pause(link, reason) {
     if (!link.paused || link.pauseReason !== reason) this.store.log('warn', `Koppeling Spoolman #${link.spoolmanId} gepauzeerd: ${reason}`);

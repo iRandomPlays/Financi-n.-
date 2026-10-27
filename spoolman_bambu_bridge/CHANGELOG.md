@@ -1,5 +1,8 @@
 # Wijzigingen
 
+## 0.3.0
+- Publiceert de voorraad als sensoren in Home Assistant: `sensor.spoolman_rol_<id>`, `sensor.spoolman_voorraad` (totaal en lijst met rollen) en `sensor.spoolman_bridge_status`. Vereist `homeassistant_api`. Instelling: grens voor lage voorraad (standaard 100 g).
+
 ## 0.2.6
 - Aangemaakte Bambu-rol: geen dubbel materiaal in de naam ("PLA PLA ...") en kleur als `#RRGGBBFF`.
 
