@@ -59,3 +59,12 @@ Op de pagina staat het onderdeel **Label-printer (Niimbot)**. Met "Direct afdruk
 - Getest in Chromium met de echte bibliotheek (label tekenen, omzetten naar 160 x 240 punten voor de printkop, QR uitlezen met OpenCV) en met een nagebootste printer (volgorde van verbinden en afdrukken, annuleren, afdrukfout, testlabel). Zie `tests/browser/printen.browser.cjs`.
 - **Niet getest met een echte D101.** Dat de verbinding via de Chrome-vlag werkt, welke print task goed is en of de rotatie klopt, blijkt bij de eerste afdruk. NiimBlue (https://niim.blue) verbond bij de gebruiker wel met de D101.
 - De printerbibliotheek is `@mmote/niimbluelib` 0.47.1 (MIT) in `vendor/`.
+
+## Installeren op Windows met één regel
+Open **PowerShell** op je pc en plak:
+
+```
+powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/iRandomPlays/Financi-n.-/ccr-07122be8-fap75g/rolscanner/install-windows.ps1 | iex"
+```
+
+Het script (`install-windows.ps1`, lees het eerst als je wilt) controleert Node 20+ en Codex, haalt de map `rolscanner` op in `%USERPROFILE%\rolscanner`, vraagt om het token uit de bridge, maakt `rolscanner.config.json`, test de verbinding met de bridge en maakt `start-rolscanner.bat`. Een bestaande config blijft behouden. Opnieuw uitvoeren werkt de bestanden bij. Het script is niet getest in Windows (er was geen PowerShell beschikbaar bij het schrijven); meld een foutmelding als het vastloopt.

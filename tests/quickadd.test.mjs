@@ -187,3 +187,15 @@ test('rolscanner serveert de meegeleverde printerbibliotheek en de labelinstelli
   assert.ok(page.includes('vendor/niimbluelib.min.js') && page.includes('Afdrukken naar Niimbot'));
   sc.close();
 });
+
+test('config laden: werkt ook met BOM (Kladblok/PowerShell), ontbrekend bestand geeft standaardwaarden, ongeldige JSON geeft duidelijke fout', async () => {
+  const { loadConfig } = await import('../rolscanner/rolscanner.mjs');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cfg-'));
+  const f = path.join(dir, 'c.json');
+  await fs.writeFile(f, '﻿' + JSON.stringify({ bridgeUrl: 'http://x:8100', token: 'abc', port: 9000 }));
+  const c = await loadConfig(f);
+  assert.equal(c.bridgeUrl, 'http://x:8100'); assert.equal(c.token, 'abc'); assert.equal(c.port, 9000); assert.equal(c.labelBaseUrl, 'http://homeassistant.local:3005');
+  assert.equal((await loadConfig(path.join(dir, 'bestaat-niet.json'))).port, 8787);
+  await fs.writeFile(f, '{ kapot');
+  await assert.rejects(() => loadConfig(f), /Config onleesbaar/);
+});
