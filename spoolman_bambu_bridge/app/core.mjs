@@ -9,7 +9,7 @@ import { fetchUsageLogs, ingest, historyState } from './history.mjs';
 import { quickAdd, catalog } from './quickadd.mjs';
 import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
 
-export const VERSION = '0.6.2';
+export const VERSION = '0.6.3';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -340,18 +340,12 @@ export class Bridge {
   // Verkenning: staan je eigen filamentprofielen (SUNLU C190 e.d.) in dit endpoint, en met welk ID?
   async slicerProbe() {
     const d = await this.bambu().slicerSettings();
-    const found = [];
-    const walk = (v, path, depth) => {
-      if (depth > 6 || v == null) return;
-      if (Array.isArray(v)) { v.forEach((x, i) => walk(x, `${path}[${i}]`, depth + 1)); return; }
-      if (typeof v === 'object') {
-        const name = v.name || v.filamentName || v.filament_name;
-        if (typeof name === 'string' && /sunlu/i.test(name)) found.push({ path, name, keys: Object.keys(v).slice(0, 12), id: v.setting_id ?? v.filament_id ?? v.filamentId ?? v.id ?? null });
-        for (const [k, x] of Object.entries(v)) walk(x, `${path}.${k}`, depth + 1);
-      }
+    const f = d?.filament || {};
+    const pick = (p) => ({ setting_id: p.setting_id, name: p.name, filament_id: p.filament_id, base_id: p.base_id, vendor: p.filament_vendor, type: p.filament_type, nozzle_temperature: p.nozzle_temperature, version: p.version });
+    return {
+      filamentKeys: Object.keys(f), counts: Object.fromEntries(Object.entries(f).map(([k, v]) => [k, Array.isArray(v) ? v.length : typeof v])),
+      private: (Array.isArray(f.private) ? f.private : []).slice(0, 40).map(pick),
     };
-    walk(d, '$', 0);
-    return { topKeys: d && typeof d === 'object' ? Object.keys(d).slice(0, 15) : typeof d, sunlu: found.slice(0, 20) };
   }
   // Bambu's profielenbibliotheek (het "Type" in Handy), een uur in het geheugen bewaard.
   async profileList(bambu = this.bambu()) {
