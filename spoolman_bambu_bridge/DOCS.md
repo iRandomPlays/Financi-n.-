@@ -29,3 +29,6 @@ Elke ronde publiceert de bridge: `sensor.spoolman_rol_<id>` (resterende grammen 
 
 ## Printgeschiedenis
 Vul in de bridge de SpoolmanSync-URL (bijv. `http://172.30.32.1:3005`) en de printer-prefix (bijv. `x2d_20p9bj620700578`) in. De bridge leest dan elke ronde de afboekingen van SpoolmanSync. De grammen zijn wat SpoolmanSync afboekt (gepland gewicht x voortgang): een schatting, geen meting. Naam, status en voortgang van een print worden vastgelegd op het moment dat de afboeking wordt gezien; bij afboekingen die al ouder zijn dan 30 minuten blijft de naam leeg ("Onbekende print").
+
+## Pc-app: rol toevoegen met foto
+De bridge heeft een tweede poort (8100) voor de pc-app in de map `rolscanner/` (zie `rolscanner/README.md`). Die poort accepteert alleen "rol toevoegen" en de lijst met merken, en alleen met een token dat je in de bridge-interface aanmaakt (onderdeel Pc-app). Het token wordt eenmalig getoond en alleen als hash bewaard; een nieuw token maakt het oude ongeldig. Na 5 foute pogingen wordt het adres een minuut geblokkeerd. Poort 8100 is bereikbaar voor je hele thuisnetwerk; het token is de enige beveiliging.

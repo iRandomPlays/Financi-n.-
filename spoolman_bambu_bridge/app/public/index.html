@@ -5,7 +5,7 @@
 <h1>Spoolman Bambu Bridge <small id="ver"></small></h1>
 <section><h2>Verbindingen</h2><div id="conn"></div>
 <label>Spoolman-URL <input id="url" placeholder="http://homeassistant.local:7912"></label>
-<label>SpoolmanSync-URL (voor printgeschiedenis) <input id="sync" placeholder="http://172.30.32.1:3005"></label>
+<label>SpoolmanSync-URL (voor printgeschiedenis) <input id="syncurl" placeholder="http://172.30.32.1:3005"></label>
 <label>Printer-prefix in Home Assistant <input id="prefix" placeholder="x2d_20p9bj620700578"></label>
 <label>Interval (s) <input id="interval" type="number" min="30" max="3600"></label>
 <label>Lage voorraad vanaf (g) <input id="low" type="number" min="0" max="1000"></label>
@@ -18,6 +18,7 @@
 <button id="logout" hidden>Uitloggen</button></section>
 <section><h2>Koppelingen</h2><button id="sync">Nu synchroniseren</button><div id="last"></div><div id="links"></div></section>
 <section><h2>Rollen koppelen</h2><button id="load">Rollen laden</button><div id="suggest"></div><div id="spools"></div></section>
+<section><h2>Pc-app (rollen toevoegen met foto)</h2><p id="tokenInfo"></p><button id="newtoken">Nieuw token aanmaken</button><pre id="tokenOut" hidden></pre></section>
 <section><h2>Recente activiteit</h2><ul id="activity"></ul></section>
 <div id="msg" role="status"></div>
 </main><script src="ui.js"></script></body></html>

@@ -1,0 +1,9 @@
+{
+  "bridgeUrl": "http://homeassistant.local:8100",
+  "token": "PLAK-HIER-HET-TOKEN-UIT-DE-BRIDGE",
+  "port": 8787,
+  "host": "127.0.0.1",
+  "codexBin": "codex",
+  "codexArgs": [],
+  "timeoutSec": 120
+}

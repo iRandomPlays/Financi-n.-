@@ -1,5 +1,9 @@
 # Wijzigingen
 
+## 0.5.0
+- Rol snel toevoegen vanaf de pc-app (map `rolscanner/`): extra poort 8100 met token, alleen `POST /api/quick-add` en `GET /api/quick-add/catalog`. Zoekt of maakt leverancier en filament in Spoolman (met nozzle- en bedtemperatuur) en maakt de rol aan. Token aanmaken in de bridge-interface; alleen de hash wordt bewaard.
+- Fix: het invoerveld voor de SpoolmanSync-URL had dezelfde id als de knop "Nu synchroniseren" (0.4.0), waardoor die knop niet werkte.
+
 ## 0.4.0
 - Printgeschiedenis: leest de afboekingen (`spool_usage`) uit SpoolmanSync, groepeert afboekingen binnen 15 minuten tot één print en publiceert `sensor.printgeschiedenis` (laatste 15 prints met gram per rol). Printnaam, status en voortgang komen uit de officiële Bambu-integratie en worden alleen bij verse afboekingen vastgelegd. Instellingen: SpoolmanSync-URL en printer-prefix.
 

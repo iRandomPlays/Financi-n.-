@@ -37,6 +37,7 @@ export function createApp({ bridge, ingressOnly = false, publicDir = path.join(h
         if (route === 'POST /api/links') return send(200, await bridge.addLink(body.spoolmanId, body.bambuId));
         if (route === 'POST /api/links/create-bambu') return send(200, await bridge.createBambuFor(body.spoolmanId));
         if (req.method === 'DELETE' && p.startsWith('/api/links/')) { await bridge.removeLink(p.slice(11)); return send(200, { ok: true }); }
+        if (route === 'POST /api/lan-token') return send(200, { token: await bridge.newLanToken() });
         if (route === 'POST /api/sync') return send(200, await bridge.syncOnce('handmatig'));
         // Voorstel uit G-code; boekt niets af.
         if (route === 'POST /api/estimate') {
@@ -60,6 +61,35 @@ export function createApp({ bridge, ingressOnly = false, publicDir = path.join(h
   });
 }
 
+// Tweede, smalle ingang voor de pc-app: alleen rol toevoegen, alleen met token.
+export function createLanApp({ bridge }) {
+  const fails = new Map();
+  return http.createServer(async (req, res) => {
+    const send = (code, body) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
+    try {
+      const ip = req.socket.remoteAddress || '?';
+      const f = fails.get(ip) || { n: 0, until: 0 };
+      if (Date.now() < f.until) return send(429, { error: 'Te veel pogingen, wacht even' });
+      const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      if (!bridge.checkLanToken(token)) {
+        f.n++; if (f.n >= 5) { f.until = Date.now() + 60000; f.n = 0; } fails.set(ip, f);
+        return send(401, { error: 'Token ongeldig of niet ingesteld' });
+      }
+      fails.delete(ip);
+      const p = new URL(req.url, 'http://x').pathname;
+      if (req.method === 'GET' && p === '/api/quick-add/catalog') return send(200, await bridge.quickAddCatalog());
+      if (req.method === 'POST' && p === '/api/quick-add') {
+        let raw = ''; for await (const c of req) { raw += c; if (raw.length > 20000) throw new HttpError('Verzoek te groot', 413); }
+        let body; try { body = JSON.parse(raw || '{}'); } catch { throw new HttpError('Ongeldige JSON', 400); }
+        return send(200, await bridge.quickAddSpool(body));
+      }
+      return send(404, { error: 'Onbekend endpoint' });
+    } catch (e) {
+      send(e.status >= 400 && e.status < 600 ? e.status : 500, { error: e.message });
+    }
+  });
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const dataDir = process.env.DATA_DIR || '/data';
   const store = new Store(path.join(dataDir, 'state.json'));
@@ -68,4 +98,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   bridge.schedule();
   const port = Number(process.env.PORT || 8099);
   createApp({ bridge, ingressOnly: process.env.INGRESS_ONLY === '1' }).listen(port, () => console.log(`Spoolman Bambu Bridge luistert op ${port}`));
+  const lanPort = Number(process.env.LAN_PORT || 8100);
+  createLanApp({ bridge }).listen(lanPort, () => console.log(`Pc-app-ingang (token vereist) op ${lanPort}`));
 }

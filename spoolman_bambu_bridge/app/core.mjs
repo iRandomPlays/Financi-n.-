@@ -6,8 +6,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { HaPublisher, buildStates, STATUS_ID } from './publish.mjs';
 import { fetchUsageLogs, ingest, historyState } from './history.mjs';
+import { quickAdd, catalog } from './quickadd.mjs';
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -93,6 +94,11 @@ export class SpoolmanClient {
     const data = await request(`${this.base}/api/v1/spool?allow_archived=true`, { fetchImpl: this.fetchImpl });
     return (data || []).map(normalizeSpoolmanSpool);
   }
+  async listVendors() { return request(`${this.base}/api/v1/vendor`, { fetchImpl: this.fetchImpl }); }
+  async listFilaments() { return request(`${this.base}/api/v1/filament`, { fetchImpl: this.fetchImpl }); }
+  async createVendor(b) { return request(`${this.base}/api/v1/vendor`, { method: 'POST', body: b, fetchImpl: this.fetchImpl }); }
+  async createFilament(b) { return request(`${this.base}/api/v1/filament`, { method: 'POST', body: b, fetchImpl: this.fetchImpl }); }
+  async createSpool(b) { return request(`${this.base}/api/v1/spool`, { method: 'POST', body: b, fetchImpl: this.fetchImpl }); }
   async ping() { await request(`${this.base}/api/v1/health`, { fetchImpl: this.fetchImpl }); }
 }
 
@@ -297,6 +303,30 @@ export class Bridge {
     return { spools, cloud, links: this.s.links, suggestions };
   }
 
+  // Snel toevoegen vanaf de pc-app. Staat autoCreate aan, dan zet de bridge de rol meteen ook in Bambu.
+  async quickAddSpool(input) {
+    const r = await quickAdd(this.spoolman(), input);
+    this.store.log('info', `Rol toegevoegd via foto: Spoolman #${r.spoolId} ${r.name} ${r.weight} g`);
+    await this.store.save();
+    if (this.s.settings.autoCreate && this.s.bambu.token) this.syncOnce('nieuwe rol').catch(() => {});
+    return r;
+  }
+  quickAddCatalog() { return catalog(this.spoolman()); }
+  // Token voor de pc-app (poort 8100): wordt eenmalig getoond en alleen als hash bewaard.
+  async newLanToken() {
+    const token = crypto.randomBytes(24).toString('base64url');
+    this.s.settings.lanTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    await this.store.save();
+    this.store.log('info', 'Nieuw token voor de pc-app aangemaakt');
+    return token;
+  }
+  checkLanToken(token) {
+    const h = this.s.settings.lanTokenHash;
+    if (!h || !token) return false;
+    const a = Buffer.from(crypto.createHash('sha256').update(String(token)).digest('hex'));
+    const b = Buffer.from(h);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
   async spoolmanCheck() {
     try {
       const spools = await this.spoolman().listSpools();
@@ -485,7 +515,7 @@ export class Bridge {
   status() {
     return {
       version: VERSION,
-      settings: this.s.settings,
+      settings: { ...this.s.settings, lanTokenHash: undefined, lanTokenSet: !!this.s.settings.lanTokenHash },
       bambu: { status: this.s.bambu.status, email: this.s.bambu.email ? this.s.bambu.email.replace(/^(.).*(@.*)$/, '$1***$2') : '' },
       links: this.s.links, pendingCreates: this.s.pendingCreates,
       history: this.s.history.prints.slice(0, 20), lastRound: this.lastRound, running: this.running, activity: this.s.activity.slice(0, 50),
