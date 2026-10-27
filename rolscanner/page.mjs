@@ -17,11 +17,13 @@ button{background:var(--acc);color:#fff;border:0;min-height:48px;cursor:pointer;
 #preview{max-width:100%;max-height:260px;border-radius:8px;display:none;margin-top:8px}
 #msg{min-height:1.4em}.bad{color:var(--bad)}.ok{color:var(--ok)}
 .swatch{width:44px;flex:none!important}
+.chips{display:flex;gap:8px;margin-top:6px}.chip{flex:1;width:auto;margin:0;min-height:42px;background:#8885;color:var(--fg)}.chip.on{background:var(--acc);color:#fff}
 ul{padding-left:18px;margin:6px 0}
 </style></head><body><main>
 <h1>Rol toevoegen</h1>
 <section><h2>1. Printinstellingen (blijven staan)</h2>
-<div class="row"><div><label for="nozzle">Nozzle (&deg;C)</label><input id="nozzle" type="number" inputmode="numeric" min="100" max="400"></div>
+<div class="row"><div><label for="nozzle">Nozzle (&deg;C)</label><input id="nozzle" type="number" inputmode="numeric" min="100" max="400">
+<div class="chips"><button type="button" class="chip" data-t="190">190</button><button type="button" class="chip" data-t="210">210</button><button type="button" class="chip" data-t="220">220</button></div></div>
 <div><label for="bed">Bed (&deg;C)</label><input id="bed" type="number" inputmode="numeric" min="0" max="150"></div></div></section>
 <section><h2>2. Foto van het label</h2>
 <input id="photo" type="file" accept="image/*" capture="environment">
@@ -41,6 +43,11 @@ ul{padding-left:18px;margin:6px 0}
 var $ = function (id) { return document.getElementById(id); };
 var ids = ['nozzle', 'bed'];
 ids.forEach(function (k) { try { $(k).value = localStorage.getItem('rol.' + k) || ''; } catch (e) {} $(k).addEventListener('input', function () { try { localStorage.setItem('rol.' + k, $(k).value); } catch (e) {} validate(); }); });
+function markChips() { document.querySelectorAll('.chip').forEach(function (c) { c.classList.toggle('on', c.getAttribute('data-t') === $('nozzle').value.trim()); }); }
+document.querySelectorAll('.chip').forEach(function (c) {
+  c.addEventListener('click', function () { $('nozzle').value = c.getAttribute('data-t'); try { localStorage.setItem('rol.nozzle', $('nozzle').value); } catch (e) {} markChips(); validate(); });
+});
+$('nozzle').addEventListener('input', markChips); markChips();
 function say(t, cls) { $('msg').textContent = t; $('msg').className = cls || ''; }
 function validHex(v) { return /^#?[0-9a-fA-F]{6}$/.test(v.trim()); }
 function validate() {

@@ -7,8 +7,9 @@ import crypto from 'node:crypto';
 import { HaPublisher, buildStates, STATUS_ID } from './publish.mjs';
 import { fetchUsageLogs, ingest, historyState } from './history.mjs';
 import { quickAdd, catalog } from './quickadd.mjs';
+import { listProfiles, matchProfile } from './profiles.mjs';
 
-export const VERSION = '0.5.2';
+export const VERSION = '0.6.0';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -185,16 +186,17 @@ export class BambuClient {
   }
 }
 
-export function bambuCreateBody(spool, marker) {
+// profile (optioneel): het passende Bambu-profiel uit de bibliotheek ("Type" in Handy). Zonder profiel blijft filamentId leeg.
+export function bambuCreateBody(spool, marker, profile = null) {
   const material = spool.material || 'PLA';
   const total = Math.round(spool.initialWeight || spool.remainingWeight || 1000);
   return {
     createType: 'manual',
-    filamentVendor: spool.brand || '',
-    filamentType: material,
+    filamentVendor: profile ? profile.vendor : spool.brand || '',
+    filamentType: profile ? profile.type : material,
     // Materiaal alleen voorvoegen als de naam er nog niet mee begint (voorkomt "PLA PLA ...").
-    filamentName: spool.name ? (spool.name.toUpperCase().startsWith(material.toUpperCase()) ? spool.name : `${material} ${spool.name}`).slice(0, 60) : material,
-    filamentId: '',
+    filamentName: profile ? profile.name : spool.name ? (spool.name.toUpperCase().startsWith(material.toUpperCase()) ? spool.name : `${material} ${spool.name}`).slice(0, 60) : material,
+    filamentId: profile ? profile.id : '',
     isSupport: false,
     color: `#${(spool.colorHex || '888888').slice(0, 6).toUpperCase()}FF`, // zelfde notatie als Bambu zelf (#RRGGBBAA)
     colorType: 2,
@@ -331,13 +333,20 @@ export class Bridge {
     const b = Buffer.from(h);
     return a.length === b.length && crypto.timingSafeEqual(a, b);
   }
-  // Verkenning: structuur van Bambu's profielenbibliotheek (om de koppeling op te baseren).
-  async profileProbe() {
-    const cfg = await this.bambu().filamentConfig();
-    const shape = (v, d = 0) => (Array.isArray(v) ? { array: v.length, eerste: d < 3 && v.length ? shape(v[0], d + 1) : undefined }
-      : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).slice(0, 12).map(([k, x]) => [k, d < 3 ? shape(x, d + 1) : typeof x]))
-      : typeof v === 'string' ? v.slice(0, 40) : v);
-    return { bytes: JSON.stringify(cfg).length, vorm: shape(cfg) };
+  // Bambu's profielenbibliotheek (het "Type" in Handy), een uur in het geheugen bewaard.
+  async profileList(bambu = this.bambu()) {
+    if (!this.profileCache || Date.now() - this.profileCache.at > 3600e3) this.profileCache = { at: Date.now(), list: listProfiles(await bambu.filamentConfig()) };
+    return this.profileCache.list;
+  }
+  async findProfile(bambu, spool) {
+    try {
+      const p = matchProfile(await this.profileList(bambu), spool);
+      this.store.log(p ? 'info' : 'warn', p ? `Bambu-profiel voor Spoolman #${spool.id}: ${p.vendor} ${p.name} (${p.id})` : `Geen Bambu-profiel gevonden voor Spoolman #${spool.id} (${spool.brand} ${spool.name}); type blijft leeg`);
+      return p;
+    } catch (e) {
+      this.store.log('warn', `Profielenbibliotheek niet beschikbaar: ${e.message}`);
+      return null;
+    }
   }
   async spoolmanCheck() {
     try {
@@ -381,7 +390,8 @@ export class Bridge {
       if (!this.s.pendingCreates.some((p) => p.spoolmanId === spoolmanId)) this.s.pendingCreates.push({ spoolmanId, marker, startedAt: new Date().toISOString() });
       await this.store.save();
       try {
-        const r = await bambu.createFilament(bambuCreateBody(spool, marker));
+        const profile = await this.findProfile(bambu, spool);
+        const r = await bambu.createFilament(bambuCreateBody(spool, marker, profile));
         bambuId = r?.id ?? r?.data?.id;
       } catch (e) {
         if (e.uncertain) {

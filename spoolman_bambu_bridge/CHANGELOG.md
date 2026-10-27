@@ -1,5 +1,9 @@
 # Wijzigingen
 
+## 0.6.0
+- Nieuwe Bambu-rollen krijgen het bijpassende profiel uit Bambu's bibliotheek (het "Type" in Handy en Studio, `filamentId`), gezocht op merk, materiaal en productnaam. Is er geen eenduidig profiel, dan blijft het type leeg en staat dat in de activiteit. `GET /api/bambu/profiles` toont de bibliotheek. De bibliotheek vraagt een Bambu-inlog.
+- Rolscanner: knoppen voor nozzletemperatuur 190, 210 en 220.
+
 ## 0.5.0
 - Rol snel toevoegen vanaf de pc-app (map `rolscanner/`): extra poort 8100 met token, alleen `POST /api/quick-add` en `GET /api/quick-add/catalog`. Zoekt of maakt leverancier en filament in Spoolman (met nozzle- en bedtemperatuur) en maakt de rol aan. Token aanmaken in de bridge-interface; alleen de hash wordt bewaard.
 - Fix: het invoerveld voor de SpoolmanSync-URL had dezelfde id als de knop "Nu synchroniseren" (0.4.0), waardoor die knop niet werkte.

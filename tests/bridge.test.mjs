@@ -19,6 +19,7 @@ async function setup({ spools, cloud = [], failCreate = null } = {}) {
   const bambu = { cloud, nextId: 100, puts: [], creates: 0, failCreate };
   const smSrv = await listen((req, res) => req.url.startsWith('/api/v1/spool') ? json(res, 200, sm.spools) : json(res, 200, {}));
   const bSrv = await listen(async (req, res) => {
+    if (req.url.includes('/filament/config') && bambu.catalog) return json(res, req.headers.authorization ? 200 : 401, bambu.catalog);
     if (!req.url.includes('/my/filament/v2')) return json(res, 404, {});
     if (req.method === 'GET') return json(res, 200, { total: bambu.cloud.length, hits: bambu.cloud });
     const body = await readBody(req);
@@ -265,4 +266,22 @@ test('geschiedenis: bridge publiceert sensor.printgeschiedenis met printnaam uit
   assert.equal(g.attributes.prints[0].gepland_g, 31); assert.equal(g.attributes.prints[0].rollen[0].gram, 7.5);
   await assert.rejects(() => t.bridge.updateSettings({ printerPrefix: 'a b' }));
   ha.close(); sync.close(); t.close();
+});
+
+test('aanmaken in Bambu: profiel uit de bibliotheek (met inlog) en terugval zonder bibliotheek', async () => {
+  const catalog = { filamentSettings: [{ filamentVendor: 'SUNLU', filamentType: 'PLA', filamentName: 'PLA C220', filamentId: 'P9877e1f', isSupport: false }] };
+  const sm = { brand: 'Sunlu', name: 'PLA C220 Zwart' };
+  const mk = (id) => ({ id, remaining_weight: 1000, initial_weight: 1000, archived: false, filament: { name: sm.name, material: 'PLA', color_hex: '161616', vendor: { name: sm.brand } } });
+  const t = await setup({ spools: [mk(1)] });
+  t.bambu.catalog = catalog;
+  await t.bridge.createBambuFor(1);
+  const c = t.bambu.cloud[0];
+  assert.deepEqual([c.filamentVendor, c.filamentType, c.filamentName, c.filamentId], ['SUNLU', 'PLA', 'PLA C220', 'P9877e1f']);
+  assert.ok(t.store.state.activity.some((a) => /Bambu-profiel voor Spoolman #1/.test(a.message)));
+  // bibliotheek niet beschikbaar: rol wordt toch aangemaakt, zonder type, met melding
+  t.sm.spools.push(mk(2)); t.bambu.catalog = null; t.bridge.profileCache = null;
+  await t.bridge.createBambuFor(2);
+  assert.equal(t.bambu.cloud[1].filamentId, ''); assert.equal(t.bambu.cloud[1].filamentName, 'PLA C220 Zwart');
+  assert.ok(t.store.state.activity.some((a) => /Profielenbibliotheek niet beschikbaar/.test(a.message)));
+  t.close();
 });
