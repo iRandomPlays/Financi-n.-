@@ -10,6 +10,7 @@ export function validate(i) {
   if (!out.material) throw new QuickAddError('Materiaal ontbreekt');
   if (!out.name) throw new QuickAddError('Naam ontbreekt');
   if (!/^[0-9A-F]{6}$/.test(out.colorHex)) throw new QuickAddError('Kleurcode moet 6 hexcijfers zijn (bijv. 161616)');
+  out.location = s(i.location).slice(0, 40); // Spoolman-veld "Locatie" (bijv. Vincent of Ine); wordt niet naar Bambu gestuurd
   out.weight = Number(i.weight);
   if (!Number.isFinite(out.weight) || out.weight < 1 || out.weight > 10000) throw new QuickAddError('Gewicht moet tussen 1 en 10000 g liggen');
   for (const [k, lo, hi, label] of [['nozzle', 100, 400, 'Nozzletemperatuur'], ['bed', 0, 150, 'Bedtemperatuur']]) {
@@ -39,8 +40,8 @@ export async function quickAdd(sm, input) {
       ...(v.nozzle != null && { settings_extruder_temp: v.nozzle }), ...(v.bed != null && { settings_bed_temp: v.bed }),
     });
   }
-  const spool = await sm.createSpool({ filament_id: fil.id, initial_weight: v.weight, used_weight: 0, ...(v.comment && { comment: v.comment }) });
-  return { spoolId: spool.id, filamentId: fil.id, filamentReused: reused, vendorCreated: newVendor, name: `${v.brand} ${v.name}`, weight: v.weight };
+  const spool = await sm.createSpool({ filament_id: fil.id, initial_weight: v.weight, used_weight: 0, ...(v.location && { location: v.location }), ...(v.comment && { comment: v.comment }) });
+  return { spoolId: spool.id, filamentId: fil.id, filamentReused: reused, vendorCreated: newVendor, name: `${v.brand} ${v.name}`, weight: v.weight, location: v.location };
 }
 
 export async function catalog(sm) {

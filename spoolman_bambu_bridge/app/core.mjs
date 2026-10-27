@@ -9,7 +9,7 @@ import { fetchUsageLogs, ingest, historyState } from './history.mjs';
 import { quickAdd, catalog } from './quickadd.mjs';
 import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
 
-export const VERSION = '0.6.3';
+export const VERSION = '0.7.0';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -53,9 +53,36 @@ async function request(url, { method = 'GET', headers = {}, body, timeoutMs = 20
 
 // ---------- Opslag ----------
 
+// Vaste rol-typen voor de rolscanner, gekoppeld aan jouw eigen Bambu-profielen (filament_id uit je account, 2026-10-27).
+// nozzle = standaard nozzletemperatuur die de rolscanner invult (aanpasbaar per rol); bed blijft leeg tot je hem opgeeft.
+export const DEFAULT_ROL_TYPES = () => [
+  { key: 'c190', label: 'SUNLU PLA C190', brand: 'Sunlu', material: 'PLA', product: 'PLA C190', nozzle: 190, bed: null, profile: { vendor: 'SUNLU', type: 'PLA', name: 'PLA C190', id: 'P71db9ac' } },
+  { key: 'c210', label: 'SUNLU PLA C210', brand: 'Sunlu', material: 'PLA', product: 'PLA C210', nozzle: 210, bed: null, profile: { vendor: 'SUNLU', type: 'PLA', name: 'PLA C210', id: 'Paed3d28' } },
+  { key: 'c220', label: 'SUNLU PLA C220', brand: 'Sunlu', material: 'PLA', product: 'PLA C220', nozzle: 220, bed: null, profile: { vendor: 'SUNLU', type: 'PLA', name: 'PLA C220', id: 'P9877e1f' } },
+  { key: 'petg', label: 'SUNLU PETG Basic', brand: 'Sunlu', material: 'PETG', product: 'PETG Basic', nozzle: null, bed: null, profile: { vendor: 'SUNLU', type: 'PETG', name: 'PETG Basic', id: 'P05a4964' } },
+];
+
+function validateRolTypes(list) {
+  if (!Array.isArray(list) || list.length > 30) throw new HttpError('rolTypes moet een lijst van maximaal 30 typen zijn', 400);
+  const keys = new Set();
+  return list.map((t) => {
+    const s = (v) => String(v ?? '').trim();
+    const k = s(t.key).toLowerCase();
+    if (!/^[a-z0-9_-]{1,20}$/.test(k) || keys.has(k)) throw new HttpError(`Ongeldige of dubbele sleutel: ${k || '(leeg)'}`, 400);
+    keys.add(k);
+    const p = t.profile || {};
+    if (!s(t.label) || !s(t.brand) || !s(t.material) || !s(t.product) || !s(p.id) || !s(p.vendor) || !s(p.name)) throw new HttpError(`Type ${k}: label, merk, materiaal, product en profiel (id, vendor, name) zijn verplicht`, 400);
+    const num = (v) => (v === null || v === '' || v === undefined ? null : Math.round(Number(v)));
+    return { key: k, label: s(t.label), brand: s(t.brand), material: s(t.material).toUpperCase(), product: s(t.product), nozzle: num(t.nozzle), bed: num(t.bed),
+      profile: { vendor: s(p.vendor), type: s(p.type || t.material).toUpperCase(), name: s(p.name), id: s(p.id) } };
+  });
+}
+
 const EMPTY_STATE = () => ({
   version: 1,
-  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us' },
+  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us',
+    locations: ['Vincent', 'Ine'], rolTypes: DEFAULT_ROL_TYPES() },
+  profileOverrides: {}, // spoolmanId -> Bambu-profiel dat bij het toevoegen met een vast type is gekozen
   bambu: { token: '', email: '', status: 'disconnected' },
   links: [], // { id, spoolmanId, bambuId, paused, pauseReason, lastSyncedGrams, lastSyncAt, lastError, createdAt }
   pendingCreates: [], // { spoolmanId, marker, startedAt }
@@ -246,6 +273,12 @@ export class Bridge {
     }
     if (patch.autoSync !== undefined) st.autoSync = !!patch.autoSync;
     if (patch.autoCreate !== undefined) st.autoCreate = !!patch.autoCreate;
+    if (patch.locations !== undefined) {
+      const l = (Array.isArray(patch.locations) ? patch.locations : []).map((x) => String(x).trim()).filter(Boolean);
+      if (!l.length || l.length > 10 || l.some((x) => x.length > 40) || new Set(l.map((x) => x.toLowerCase())).size !== l.length) throw new HttpError('Locaties: 1 tot 10 unieke namen van maximaal 40 tekens', 400);
+      st.locations = l;
+    }
+    if (patch.rolTypes !== undefined) st.rolTypes = validateRolTypes(patch.rolTypes);
     for (const k of ['spoolmansyncUrl']) if (patch[k] !== undefined) {
       const u = String(patch[k]).trim();
       if (u && !/^https?:\/\//.test(u)) throw new HttpError('SpoolmanSync-URL moet met http:// of https:// beginnen', 400);
@@ -315,13 +348,21 @@ export class Bridge {
 
   // Snel toevoegen vanaf de pc-app. Staat autoCreate aan, dan zet de bridge de rol meteen ook in Bambu.
   async quickAddSpool(input) {
+    // Een vast type legt het Bambu-profiel vast (en negeert geen andere velden); onbekend type wordt geweigerd vóór er iets wordt aangemaakt.
+    const typeKey = String(input?.typeKey || '').trim().toLowerCase();
+    const type = typeKey ? this.s.settings.rolTypes.find((t) => t.key === typeKey) : null;
+    if (typeKey && !type) throw new HttpError(`Onbekend type: ${typeKey}`, 400);
+    if (input?.location && !this.s.settings.locations.some((l) => l.toLowerCase() === String(input.location).trim().toLowerCase())) throw new HttpError(`Onbekende locatie: ${input.location}`, 400);
     const r = await quickAdd(this.spoolman(), input);
-    this.store.log('info', `Rol toegevoegd via foto: Spoolman #${r.spoolId} ${r.name} ${r.weight} g`);
+    if (type) this.s.profileOverrides[r.spoolId] = type.profile;
+    this.store.log('info', `Rol toegevoegd via foto: Spoolman #${r.spoolId} ${r.name} ${r.weight} g${r.location ? `, locatie ${r.location}` : ''}${type ? `, type ${type.label}` : ''}`);
     await this.store.save();
     if (this.s.settings.autoCreate && this.s.bambu.token) this.syncOnce('nieuwe rol').catch(() => {});
     return r;
   }
-  quickAddCatalog() { return catalog(this.spoolman()); }
+  async quickAddCatalog() {
+    return { ...(await catalog(this.spoolman())), locations: this.s.settings.locations, types: this.s.settings.rolTypes };
+  }
   // Token voor de pc-app (poort 8100): wordt eenmalig getoond en alleen als hash bewaard.
   async newLanToken() {
     const token = crypto.randomBytes(24).toString('base64url');
@@ -406,7 +447,9 @@ export class Bridge {
       if (!this.s.pendingCreates.some((p) => p.spoolmanId === spoolmanId)) this.s.pendingCreates.push({ spoolmanId, marker, startedAt: new Date().toISOString() });
       await this.store.save();
       try {
-        const profile = await this.findProfile(bambu, spool, rolls);
+        const fixed = this.s.profileOverrides[spoolmanId];
+        if (fixed) this.store.log('info', `Vast Bambu-profiel voor Spoolman #${spoolmanId}: ${fixed.vendor} ${fixed.name} (${fixed.id})`);
+        const profile = fixed || await this.findProfile(bambu, spool, rolls);
         const r = await bambu.createFilament(bambuCreateBody(spool, marker, profile));
         bambuId = r?.id ?? r?.data?.id;
       } catch (e) {

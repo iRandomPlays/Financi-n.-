@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 0.7.0
+- Vaste rol-typen voor de rolscanner (SUNLU PLA C190, C210, C220 en PETG Basic), elk vast gekoppeld aan jouw eigen Bambu-profiel (`filament_id` uit je account). Een rol die met een type wordt toegevoegd, krijgt in Bambu precies dat profiel. Typen en locaties zijn instelbaar (`rolTypes`, `locations` in de instellingen).
+- Locatie (bijv. Vincent of Ine) wordt bij het toevoegen in Spoolman op de rol gezet (veld "Locatie") en niet naar Bambu gestuurd.
+- Verkenning van je eigen filamentprofielen: `GET /api/bambu/slicer-probe` (alleen lezen).
+
 ## 0.6.1
 - Zie 0.6.0; profielen van bestaande rollen gaan voor, de terugval op één profiel per merk is verwijderd, en een niet bereikbare bibliotheek laat de profielen van bestaande rollen intact.
 

@@ -297,3 +297,21 @@ test('aanmaken in Bambu: profiel uit de bibliotheek (met inlog) en terugval zond
   assert.ok(t.store.state.activity.some((a) => /Geen Bambu-profiel gevonden voor Spoolman #4/.test(a.message)));
   t.close();
 });
+
+test('vast type: het vastgelegde Bambu-profiel gaat voor zoeken, ook zonder bestaande rol of bibliotheek', async () => {
+  const mk = (id) => ({ id, remaining_weight: 190, initial_weight: 1000, archived: false, filament: { name: 'PLA C190 Rood', material: 'PLA', color_hex: 'FF0000', vendor: { name: 'Sunlu' } } });
+  const t = await setup({ spools: [mk(1), mk(2)] });
+  t.store.state.profileOverrides[1] = { vendor: 'SUNLU', type: 'PLA', name: 'PLA C190', id: 'P71db9ac' };
+  await t.bridge.createBambuFor(1);
+  const c = t.bambu.cloud.find((x) => x.note === '[spoolman:1]');
+  assert.deepEqual([c.filamentVendor, c.filamentType, c.filamentName, c.filamentId, c.netWeight], ['SUNLU', 'PLA', 'PLA C190', 'P71db9ac', 190]);
+  assert.ok(t.store.state.activity.some((a) => /Vast Bambu-profiel voor Spoolman #1/.test(a.message)));
+  // Rol 2 heeft geen override, maar leert het profiel van de zojuist aangemaakte rol 1 (zelfde merk, materiaal en productnaam).
+  await t.bridge.createBambuFor(2);
+  assert.equal(t.bambu.cloud.find((x) => x.note === '[spoolman:2]').filamentId, 'P71db9ac');
+  // Onbekend product zonder override en zonder bron: type blijft leeg.
+  t.sm.spools.push({ ...mk(3), filament: { ...mk(3).filament, name: 'Mysterie Rood' } });
+  await t.bridge.createBambuFor(3);
+  assert.equal(t.bambu.cloud.find((x) => x.note === '[spoolman:3]').filamentId, '');
+  t.close();
+});

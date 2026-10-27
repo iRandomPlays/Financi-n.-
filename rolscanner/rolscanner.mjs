@@ -45,6 +45,7 @@ export function sanitize(raw) {
   const fields = {
     brand: str(raw?.brand), material: str(raw?.material).toUpperCase(), name: [str(raw?.product), str(raw?.colorName)].filter(Boolean).join(' '),
     colorHex: m ? m[1].toUpperCase() : '', netWeight: Number.isFinite(raw?.netWeight) ? raw.netWeight : null,
+    colorName: str(raw?.colorName), // los doorgegeven: bij een vast type wordt de naam "<type> <kleur>"
   };
   // Elk veld dat leeg is of niet klopt, moet jij controleren.
   const map = { brand: 'brand', material: 'material', name: 'product', colorHex: 'colorHex' };
@@ -125,7 +126,7 @@ export function createScanner(cfg, { fetchImpl = fetch, read = readLabel } = {})
       if (req.method === 'POST' && p === '/api/save') {
         const b = await readBody(20000);
         // Alleen deze velden gaan door naar de bridge; de bridge valideert opnieuw.
-        const out = await bridge(cfg, 'POST', '/api/quick-add', { brand: b.brand, material: b.material, name: b.name, colorHex: b.colorHex, weight: b.weight, nozzle: b.nozzle, bed: b.bed, comment: 'Toegevoegd via rolscanner' }, fetchImpl);
+        const out = await bridge(cfg, 'POST', '/api/quick-add', { brand: b.brand, material: b.material, name: b.name, colorHex: b.colorHex, weight: b.weight, nozzle: b.nozzle, bed: b.bed, location: b.location, typeKey: b.typeKey, comment: 'Toegevoegd via rolscanner' }, fetchImpl);
         return send(200, out);
       }
       send(404, { error: 'Onbekend endpoint' });

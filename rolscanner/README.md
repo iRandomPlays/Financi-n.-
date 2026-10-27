@@ -16,7 +16,8 @@ telefoon of pc-browser  →  rolscanner (je pc, Codex CLI)  →  bridge-poort 81
 Voor gebruik met je telefoon zet je `"host": "0.0.0.0"` in de config en open je `http://<ip-van-je-pc>:8787`. De pagina heeft zelf geen wachtwoord; doe dit alleen op je eigen netwerk en laat Windows-firewall alleen het privénetwerk toe.
 
 ## Gebruik
-1. Vul nozzle- en bedtemperatuur één keer in. Ze blijven staan in je browser tot je ze wijzigt.
+0. Kies bovenaan de **locatie** (Vincent of Ine) en het **type** (SUNLU PLA C190, C210, C220, PETG Basic of "Anders, lees het label"). Beide blijven staan bij de volgende rol. Een vast type zet merk, materiaal en nozzletemperatuur vast en koppelt de rol in Bambu aan jouw eigen profiel; Codex hoeft dan alleen de kleur te lezen. De locatie komt alleen in Spoolman.
+1. Vul nozzle- en bedtemperatuur één keer in (of tik 190, 210 of 220). Ze blijven staan in je browser tot je ze wijzigt.
 2. Neem een foto van het label. Codex leest het label; dat duurt een paar seconden tot een halve minuut.
 3. Controleer de velden. **Rood omrand = onzeker of leeg**, daar moet je naar kijken. De kleurcode van een foto is altijd een schatting; pas hem aan met de kleurkiezer als hij niet klopt.
 4. Vul het gewicht in. Dit veld is bij elke rol weer leeg. Het gewicht van het label staat als hint ernaast.

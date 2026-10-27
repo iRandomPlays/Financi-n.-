@@ -92,7 +92,7 @@ test('nieuw token maakt het oude ongeldig', async () => {
 
 test('sanitize: onzekere en lege velden worden gemarkeerd; hex genormaliseerd', () => {
   const r = sanitize({ brand: ' Sunlu ', material: 'pla', product: 'PLA C220', colorName: 'Zwart', colorHex: '#161616', netWeight: 1000, unsure: ['colorHex'] });
-  assert.deepEqual(r.fields, { brand: 'Sunlu', material: 'PLA', name: 'PLA C220 Zwart', colorHex: '161616', netWeight: 1000 });
+  assert.deepEqual(r.fields, { brand: 'Sunlu', material: 'PLA', name: 'PLA C220 Zwart', colorHex: '161616', netWeight: 1000, colorName: 'Zwart' });
   assert.deepEqual(r.check, ['colorHex']);
   const r2 = sanitize({ brand: '', material: 'PLA', product: 'x', colorName: '', colorHex: 'geen', netWeight: null, unsure: [] });
   assert.ok(r2.check.includes('brand') && r2.check.includes('colorHex') && r2.fields.colorHex === '');
@@ -135,12 +135,43 @@ test('rolscanner-server: lezen, opslaan via bridge, foutafhandeling', async () =
   const img = 'data:image/jpeg;base64,' + Buffer.from('abcd').toString('base64');
   assert.equal((await (await post('/api/read', { image: img })).json()).fields.brand, 'Sunlu'); assert.deepEqual(reads, [[4, 'jpg']]);
   assert.equal((await post('/api/read', { image: 'geen afbeelding' })).status, 400);
-  const saved = await post('/api/save', { ...good, comment: 'HACK', extra: 'x' });
+  const saved = await post('/api/save', { ...good, comment: 'HACK', extra: 'x', location: 'Ine', typeKey: 'c190' });
   assert.equal((await saved.json()).spoolId, 7);
   const fwd = seen.find((s) => s[1] === '/api/quick-add');
   assert.equal(fwd[2], 'Bearer tok'); assert.equal(fwd[3].comment, 'Toegevoegd via rolscanner'); assert.equal(fwd[3].extra, undefined);
+  assert.equal(fwd[3].location, 'Ine'); assert.equal(fwd[3].typeKey, 'c190');
   assert.equal((await fetch(`${url(sc)}/api/catalog`)).status, 200);
   const sc2 = createScanner({ bridgeUrl: '', token: '' }); await new Promise((r) => sc2.listen(0, '127.0.0.1', r));
   assert.equal((await fetch(`${url(sc2)}/api/catalog`)).status, 500);
   sc.close(); sc2.close(); bridgeSrv.close();
+});
+
+test('locatie en vast type: locatie komt in Spoolman, profiel wordt vastgelegd, onbekend type of onbekende locatie wordt geweigerd', async () => {
+  const { db, srv } = await fakeSpoolman();
+  const b = await bridgeWith(url(srv));
+  const r = await b.quickAddSpool({ ...good, name: 'PLA C190 Zwart', location: 'vincent', typeKey: 'C190' });
+  assert.equal(db.spools[0].location, 'vincent'); assert.equal(r.location, 'vincent');
+  assert.equal(b.s.profileOverrides[r.spoolId].id, 'P71db9ac'); assert.equal(b.s.profileOverrides[r.spoolId].name, 'PLA C190');
+  await assert.rejects(() => b.quickAddSpool({ ...good, typeKey: 'bestaat-niet' }), /Onbekend type/);
+  await assert.rejects(() => b.quickAddSpool({ ...good, location: 'Piet' }), /Onbekende locatie/);
+  assert.equal(db.spools.length, 1); // bij een geweigerde aanvraag is niets aangemaakt
+  const r2 = await b.quickAddSpool({ ...good }); // zonder locatie en type mag ook
+  assert.equal(db.spools[1].location, undefined); assert.equal(b.s.profileOverrides[r2.spoolId], undefined);
+  const cat = await b.quickAddCatalog();
+  assert.deepEqual(cat.locations, ['Vincent', 'Ine']); assert.deepEqual(cat.types.map((t) => t.key), ['c190', 'c210', 'c220', 'petg']);
+  assert.deepEqual(cat.types.map((t) => t.profile.id), ['P71db9ac', 'Paed3d28', 'P9877e1f', 'P05a4964']);
+  srv.close();
+});
+
+test('instellingen: locaties en typen worden gevalideerd', async () => {
+  const b = await bridgeWith('http://127.0.0.1:1');
+  await b.updateSettings({ locations: ['Vincent', 'Ine', 'Opa'] });
+  assert.deepEqual(b.s.settings.locations, ['Vincent', 'Ine', 'Opa']);
+  await assert.rejects(() => b.updateSettings({ locations: [] }), /Locaties/);
+  await assert.rejects(() => b.updateSettings({ locations: ['A', 'a'] }), /Locaties/);
+  const t = { key: 'x1', label: 'X', brand: 'B', material: 'pla', product: 'P', nozzle: '205', profile: { vendor: 'V', type: 'pla', name: 'N', id: 'Pabc' } };
+  await b.updateSettings({ rolTypes: [t] });
+  assert.equal(b.s.settings.rolTypes[0].nozzle, 205); assert.equal(b.s.settings.rolTypes[0].material, 'PLA'); assert.equal(b.s.settings.rolTypes[0].bed, null);
+  await assert.rejects(() => b.updateSettings({ rolTypes: [t, t] }), /dubbele/);
+  await assert.rejects(() => b.updateSettings({ rolTypes: [{ ...t, profile: { vendor: 'V', name: 'N' } }] }), /verplicht/);
 });

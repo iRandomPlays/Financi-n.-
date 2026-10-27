@@ -21,7 +21,9 @@ button{background:var(--acc);color:#fff;border:0;min-height:48px;cursor:pointer;
 ul{padding-left:18px;margin:6px 0}
 </style></head><body><main>
 <h1>Rol toevoegen</h1>
-<section><h2>1. Printinstellingen (blijven staan)</h2>
+<section><h2>1. Instellingen (blijven staan)</h2>
+<div class="row"><div><label for="loc">Locatie (van wie)</label><select id="loc"></select></div>
+<div><label for="type">Type</label><select id="type"></select></div></div>
 <div class="row"><div><label for="nozzle">Nozzle (&deg;C)</label><input id="nozzle" type="number" inputmode="numeric" min="100" max="400">
 <div class="chips"><button type="button" class="chip" data-t="190">190</button><button type="button" class="chip" data-t="210">210</button><button type="button" class="chip" data-t="220">220</button></div></div>
 <div><label for="bed">Bed (&deg;C)</label><input id="bed" type="number" inputmode="numeric" min="0" max="150"></div></div></section>
@@ -41,6 +43,28 @@ ul{padding-left:18px;margin:6px 0}
 </main>
 <script>
 var $ = function (id) { return document.getElementById(id); };
+var CAT = { types: [], locations: [] };
+function store(k, v) { try { localStorage.setItem('rol.' + k, v); } catch (e) {} }
+function recall(k) { try { return localStorage.getItem('rol.' + k) || ''; } catch (e) { return ''; } }
+function curType() { return CAT.types.filter(function (t) { return t.key === $('type').value; })[0] || null; }
+// Vast type: merk en materiaal staan vast, de nozzletemperatuur wordt ingevuld (aanpasbaar).
+function applyType() {
+  var t = curType(); if (!t) return;
+  $('brand').value = t.brand; $('material').value = t.material;
+  if (t.nozzle != null) { $('nozzle').value = t.nozzle; store('nozzle', t.nozzle); markChips(); }
+  if (t.bed != null) { $('bed').value = t.bed; store('bed', t.bed); }
+  validate();
+}
+function fillSelects() {
+  $('loc').innerHTML = ''; CAT.locations.forEach(function (l) { var o = document.createElement('option'); o.value = l; o.textContent = l; $('loc').appendChild(o); });
+  $('type').innerHTML = ''; var any = document.createElement('option'); any.value = ''; any.textContent = 'Anders (lees het label)'; $('type').appendChild(any);
+  CAT.types.forEach(function (t) { var o = document.createElement('option'); o.value = t.key; o.textContent = t.label; $('type').appendChild(o); });
+  if (recall('loc') && CAT.locations.indexOf(recall('loc')) >= 0) $('loc').value = recall('loc');
+  if (CAT.types.some(function (t) { return t.key === recall('type'); })) $('type').value = recall('type');
+  applyType();
+}
+$('loc').addEventListener('change', function () { store('loc', $('loc').value); validate(); });
+$('type').addEventListener('change', function () { store('type', $('type').value); applyType(); });
 var ids = ['nozzle', 'bed'];
 ids.forEach(function (k) { try { $(k).value = localStorage.getItem('rol.' + k) || ''; } catch (e) {} $(k).addEventListener('input', function () { try { localStorage.setItem('rol.' + k, $(k).value); } catch (e) {} validate(); }); });
 function markChips() { document.querySelectorAll('.chip').forEach(function (c) { c.classList.toggle('on', c.getAttribute('data-t') === $('nozzle').value.trim()); }); }
@@ -51,7 +75,7 @@ $('nozzle').addEventListener('input', markChips); markChips();
 function say(t, cls) { $('msg').textContent = t; $('msg').className = cls || ''; }
 function validHex(v) { return /^#?[0-9a-fA-F]{6}$/.test(v.trim()); }
 function validate() {
-  var ok = $('brand').value.trim() && $('material').value.trim() && $('name').value.trim() && validHex($('hex').value) && Number($('weight').value) >= 1;
+  var ok = $('brand').value.trim() && $('material').value.trim() && $('name').value.trim() && validHex($('hex').value) && Number($('weight').value) >= 1 && $('loc').value;
   $('save').disabled = !ok;
 }
 ['brand', 'material', 'name', 'hex', 'weight'].forEach(function (k) { $(k).addEventListener('input', validate); });
@@ -62,7 +86,8 @@ function mark(check) {
 }
 function resetFields() {
   ['brand', 'material', 'name', 'hex', 'weight'].forEach(function (k) { $(k).value = ''; });
-  $('color').value = '#888888'; $('preview').style.display = 'none'; $('photo').value = ''; $('reading').textContent = ''; $('wHint').textContent = ''; mark([]); validate();
+  $('color').value = '#888888'; $('preview').style.display = 'none'; $('photo').value = ''; $('reading').textContent = ''; $('wHint').textContent = ''; mark([]);
+  applyType(); validate(); // locatie, type en temperaturen blijven staan; bij een vast type komen merk en materiaal terug
 }
 $('clear').onclick = function () { resetFields(); say(''); };
 function shrink(file) {
@@ -83,26 +108,33 @@ $('photo').addEventListener('change', async function () {
     var data = await shrink(f); $('preview').src = data; $('preview').style.display = 'block';
     var r = await fetch('api/read', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image: data }) });
     var j = await r.json(); if (!r.ok) throw new Error(j.error || 'Lezen mislukt');
-    $('brand').value = j.fields.brand; $('material').value = j.fields.material; $('name').value = j.fields.name;
+    var t = curType(); var check = j.check.slice();
+    if (t) { // vast type: alleen de kleur komt van de foto
+      $('brand').value = t.brand; $('material').value = t.material;
+      $('name').value = (t.product + ' ' + (j.fields.colorName || '')).trim();
+      check = check.filter(function (c) { return c === 'colorHex'; }); if (!j.fields.colorName) check.push('name');
+    } else { $('brand').value = j.fields.brand; $('material').value = j.fields.material; $('name').value = j.fields.name; }
     $('hex').value = j.fields.colorHex; if (j.fields.colorHex) $('color').value = '#' + j.fields.colorHex;
     $('wHint').textContent = j.fields.netWeight ? '(label: ' + j.fields.netWeight + ' g)' : '';
-    mark(j.check); $('reading').textContent = j.check.length ? 'Gelezen. Rood omrande velden zijn onzeker of leeg.' : 'Gelezen. Controleer alles en vul het gewicht in.';
+    j.check = check; mark(j.check); $('reading').textContent = j.check.length ? 'Gelezen. Rood omrande velden zijn onzeker of leeg.' : 'Gelezen. Controleer alles en vul het gewicht in.';
     $('weight').focus(); validate();
   } catch (e) { $('reading').textContent = ''; say(e.message, 'bad'); }
 });
 $('save').onclick = async function () {
   $('save').disabled = true; say('Opslaan...');
-  var body = { brand: $('brand').value, material: $('material').value, name: $('name').value, colorHex: $('hex').value, weight: $('weight').value, nozzle: $('nozzle').value, bed: $('bed').value };
+  var body = { brand: $('brand').value, material: $('material').value, name: $('name').value, colorHex: $('hex').value, weight: $('weight').value, nozzle: $('nozzle').value, bed: $('bed').value, location: $('loc').value, typeKey: $('type').value };
   try {
     var r = await fetch('api/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     var j = await r.json(); if (!r.ok) throw new Error(j.error || 'Opslaan mislukt');
-    var li = document.createElement('li'); li.textContent = '#' + j.spoolId + ' ' + j.name + ' – ' + j.weight + ' g' + (j.filamentReused ? ' (bestaand filament)' : ''); $('done').prepend(li);
+    var li = document.createElement('li'); li.textContent = '#' + j.spoolId + ' ' + j.name + ' – ' + j.weight + ' g' + (j.location ? ' – ' + j.location : '') + (j.filamentReused ? ' (bestaand filament)' : ''); $('done').prepend(li);
     resetFields(); say('Opgeslagen als Spoolman #' + j.spoolId + '. Volgende rol!', 'ok'); loadCatalog();
   } catch (e) { say(e.message, 'bad'); validate(); }
 };
 async function loadCatalog() {
-  try { var r = await fetch('api/catalog'); if (!r.ok) return; var j = await r.json();
+  try { var r = await fetch('api/catalog'); var j = await r.json(); if (!r.ok) { say(j.error || 'Bridge niet bereikbaar', 'bad'); return; }
     $('brands').innerHTML = ''; j.brands.forEach(function (b) { var o = document.createElement('option'); o.value = b; $('brands').appendChild(o); });
+    var sameLists = JSON.stringify(CAT.types) === JSON.stringify(j.types) && JSON.stringify(CAT.locations) === JSON.stringify(j.locations);
+    if (!sameLists) { var keepLoc = $('loc').value, keepType = $('type').value; CAT.types = j.types || []; CAT.locations = j.locations || []; fillSelects(); if (keepLoc && CAT.locations.indexOf(keepLoc) >= 0) $('loc').value = keepLoc; if (keepType && CAT.types.some(function (t) { return t.key === keepType; })) $('type').value = keepType; }
   } catch (e) {}
 }
 loadCatalog(); validate();
