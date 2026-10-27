@@ -34,3 +34,7 @@ Bestaat het filament al in Spoolman (zelfde merk, materiaal, naam en kleur), dan
 - De bridge-poort 8100 accepteert alleen "rol toevoegen" en de lijst met merken, alleen met het token. Na 5 foute pogingen wordt het afzender-adres een minuut geblokkeerd.
 - Het token wordt in de bridge alleen als hash bewaard. Een nieuw token maakt het oude ongeldig.
 - De foto wordt tijdelijk op je pc opgeslagen voor Codex en direct daarna verwijderd.
+
+## QR-label na het opslaan
+Na "Opslaan en volgende rol" verschijnt onderaan het **QR-label van die rol** (`labelBaseUrl` uit de config, standaard `http://homeassistant.local:3005`, plus `/scan/spool/<id>`). Scannen met de gewone camera van je telefoon opent de pagina van SpoolmanSync waar je de tray kiest. Met **Label afdrukken** print je alleen het label. Het adres klopt alleen op je eigen wifi en als `homeassistant.local` op je telefoon werkt; zo niet, zet dan het vaste IP van je Home Assistant in `labelBaseUrl`.
+De QR-generator zit zelf in de map (`qr.mjs`, geen bibliotheek). Het label is bij de bouw uit een echte browser-weergave uitgelezen met OpenCV.

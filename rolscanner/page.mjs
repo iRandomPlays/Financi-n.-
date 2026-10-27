@@ -1,4 +1,6 @@
 // De webpagina van de rolscanner (één bestand, geen afhankelijkheden). Bewust geen template-strings in het script.
+import { makeQr } from './qr.mjs';
+
 export const PAGE = String.raw`<!doctype html>
 <html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Rol toevoegen</title>
@@ -16,7 +18,10 @@ button{background:var(--acc);color:#fff;border:0;min-height:48px;cursor:pointer;
 .check input,.check select{border:2px solid var(--bad)}.check label::after{content:" \2013 controleer";color:var(--bad);font-weight:600}
 #preview{max-width:100%;max-height:260px;border-radius:8px;display:none;margin-top:8px}
 #msg{min-height:1.4em}.bad{color:var(--bad)}.ok{color:var(--ok)}
-.swatch{width:44px;flex:none!important}
+.swatch{width:48px;flex:none!important;padding:3px;height:46px}
+#labelPrint{display:flex;gap:14px;align-items:center;background:#fff;color:#000;border-radius:8px;padding:10px}
+#labelText{font-size:.95rem;line-height:1.3}#labelText b{display:block;font-size:1.05rem}
+@media print{body *{visibility:hidden}#labelPrint,#labelPrint *{visibility:visible}#labelPrint{position:absolute;left:0;top:0;padding:4mm}}
 .chips{display:flex;gap:8px;margin-top:6px}.chip{flex:1;width:auto;margin:0;min-height:42px;background:#8885;color:var(--fg)}.chip.on{background:var(--acc);color:#fff}
 ul{padding-left:18px;margin:6px 0}
 </style></head><body><main>
@@ -38,11 +43,32 @@ ul{padding-left:18px;margin:6px 0}
 <div><label for="weight">Gewicht (g) <span id="wHint"></span></label><input id="weight" type="number" inputmode="decimal" min="1" max="10000"></div>
 <button id="save" disabled>Opslaan en volgende rol</button><button id="clear" class="sec">Foto weggooien</button>
 <div id="msg" role="status"></div></section>
+<section id="labelSec" hidden><h2>QR-label van de laatste rol</h2>
+<div id="labelPrint"><div id="qr"></div><div id="labelText"></div></div>
+<button id="printLabel" class="sec" type="button">Label afdrukken</button><div id="labelUrl" style="font-size:.8rem;opacity:.7;margin-top:6px;word-break:break-all"></div></section>
 <section><h2>Toegevoegd in deze sessie</h2><ul id="done"></ul></section>
 <datalist id="brands"></datalist><datalist id="materials"><option value="PLA"><option value="PETG"><option value="ABS"><option value="ASA"><option value="TPU"><option value="PA"><option value="PC"><option value="PVA"></datalist>
 </main>
 <script>
+/*QR*/
 var $ = function (id) { return document.getElementById(id); };
+var INFO = { labelBaseUrl: '' };
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function qrSvg(text, px) {
+  var m = makeQr(text), n = m.length, d = '';
+  for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (m[r][c]) d += 'M' + (c + 4) + ' ' + (r + 4) + 'h1v1h-1z';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + (n + 8) + ' ' + (n + 8) + '" width="' + px + '" height="' + px + '" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="' + d + '" fill="#000"/></svg>';
+}
+// QR-label van een rol: wijst naar de SpoolmanSync-pagina waar je de tray kiest (/scan/spool/ID).
+function showLabel(j) {
+  if (!INFO.labelBaseUrl) { $('labelSec').hidden = true; return; }
+  var url = INFO.labelBaseUrl + '/scan/spool/' + j.spoolId;
+  $('qr').innerHTML = qrSvg(url, 150);
+  $('labelText').innerHTML = '<b>#' + esc(j.spoolId) + ' ' + esc(j.name) + '</b>' + esc(j.weight) + ' g' + (j.location ? ' &middot; ' + esc(j.location) : '');
+  $('labelUrl').textContent = url; $('labelSec').hidden = false;
+}
+$('printLabel').onclick = function () { window.print(); };
+fetch('api/info').then(function (r) { return r.json(); }).then(function (j) { INFO = j; }).catch(function () {});
 var CAT = { types: [], locations: [] };
 function store(k, v) { try { localStorage.setItem('rol.' + k, v); } catch (e) {} }
 function recall(k) { try { return localStorage.getItem('rol.' + k) || ''; } catch (e) { return ''; } }
@@ -127,7 +153,7 @@ $('save').onclick = async function () {
     var r = await fetch('api/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     var j = await r.json(); if (!r.ok) throw new Error(j.error || 'Opslaan mislukt');
     var li = document.createElement('li'); li.textContent = '#' + j.spoolId + ' ' + j.name + ' – ' + j.weight + ' g' + (j.location ? ' – ' + j.location : '') + (j.filamentReused ? ' (bestaand filament)' : ''); $('done').prepend(li);
-    resetFields(); say('Opgeslagen als Spoolman #' + j.spoolId + '. Volgende rol!', 'ok'); loadCatalog();
+    resetFields(); say('Opgeslagen als Spoolman #' + j.spoolId + '. Volgende rol!', 'ok'); showLabel(j); loadCatalog();
   } catch (e) { say(e.message, 'bad'); validate(); }
 };
 async function loadCatalog() {
@@ -138,4 +164,4 @@ async function loadCatalog() {
   } catch (e) {}
 }
 loadCatalog(); validate();
-</script></body></html>`;
+</script></body></html>`.replace('/*QR*/', () => makeQr.toString());

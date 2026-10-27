@@ -106,3 +106,9 @@
 - Bridge 0.7.0: typen en locaties in de instellingen, rolscanner met menu voor locatie en type.
 - Aannames die jij moet bevestigen: nozzletemperatuur 190/210/220 bij C190/C210/C220, PETG Basic zonder standaardtemperatuur, bed leeg.
 - **Getest in Home Assistant (0.7.0):** testrol met type C190 en locatie Ine via poort 8100: Spoolman kreeg locatie "Ine" en nozzle 190 °C bij het filament, Bambu kreeg SUNLU / PLA / PLA C190 met profiel `P71db9ac`; daarna opgeruimd (rol, filament, Bambu-rol). De rolscanner-pagina zelf en Codex zijn niet in een browser of met echte foto's getest.
+
+## QR-label in de rolscanner (2026-10-27)
+- Na het opslaan toont de rolscanner het QR-label van de rol: `http://homeassistant.local:3005/scan/spool/<id>` (SpoolmanSync, poort 3005 op het eigen netwerk, zonder inlog; formaat uit de broncode van SpoolmanSync). De hostnaam van het systeem is `homeassistant`; het IP van de Home Assistant-host kon ik niet vinden en is niet aangenomen.
+- **Getest:** eigen QR-generator (`rolscanner/qr.mjs`) uitgelezen met OpenCV voor 13 teksten, versie 1 t/m 10, ook met speciale tekens; de pagina in een echte browser (Chromium, telefoonbreedte) met nagebootste bridge en Codex: locatie en type kiezen, nozzle invullen, foto lezen, opslaan, label tonen en uitlezen uit het scherm, locatie en type blijven na opslaan en herladen staan.
+- **Niet getest:** de echte Codex CLI met echte labels, het afdrukken op een labelprinter, en of `homeassistant.local` op de telefoon van de gebruiker wordt gevonden of een scan daadwerkelijk de tray-keuze opent.
+- SpoolmanSync-instelling `syncSpoolmanLocation` staat uit; moet uit blijven, anders zou SpoolmanSync de locatie (Vincent/Ine) overschrijven met de tray.

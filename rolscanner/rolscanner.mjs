@@ -109,6 +109,7 @@ export function createScanner(cfg, { fetchImpl = fetch, read = readLabel } = {})
     try {
       const p = new URL(req.url, 'http://x').pathname;
       if (req.method === 'GET' && p === '/') return send(200, PAGE, 'text/html; charset=utf-8');
+      if (req.method === 'GET' && p === '/api/info') return send(200, { labelBaseUrl: String(cfg.labelBaseUrl || '').replace(/\/+$/, '') });
       if (req.method === 'GET' && p === '/api/catalog') return send(200, await bridge(cfg, 'GET', '/api/quick-add/catalog', null, fetchImpl));
       const readBody = async (limit) => {
         const chunks = []; let n = 0;
@@ -138,7 +139,9 @@ export async function loadConfig(file = path.join(here, 'rolscanner.config.json'
   let cfg = {};
   try { cfg = JSON.parse(await fs.readFile(file, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw new Error(`Config onleesbaar: ${e.message}`); }
   return {
-    port: 8787, host: '127.0.0.1', codexBin: 'codex', codexArgs: [], timeoutSec: 120, ...cfg,
+    port: 8787, host: '127.0.0.1', codexBin: 'codex', codexArgs: [], timeoutSec: 120,
+    labelBaseUrl: 'http://homeassistant.local:3005', // waar de QR-code van een rol naartoe wijst (SpoolmanSync, poort 3005)
+    ...cfg,
     bridgeUrl: process.env.ROLSCANNER_BRIDGE_URL || cfg.bridgeUrl || '', token: process.env.ROLSCANNER_TOKEN || cfg.token || '',
   };
 }
