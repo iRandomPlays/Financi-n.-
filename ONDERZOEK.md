@@ -83,3 +83,9 @@
 - Het bestaande dashboard "Home" met de pagina "Printer" is niet gewijzigd.
 - Bron van de voorraad: bridge 0.3.0 publiceert `sensor.spoolman_rol_<id>`, `sensor.spoolman_voorraad` en `sensor.spoolman_bridge_status`. Sjablonen getest met de echte gegevens (10 rollen, 8950 g).
 - Niet geverifieerd: weergave in de browser (geen screenshotfunctie beschikbaar), de snelkoppelingen `/hassio/ingress/<slug>`, en de kolom "Tray" zolang er geen rollen aan trays zijn gekoppeld. De cameraweergave is weggelaten omdat de camera-entiteit `unavailable` is.
+
+## Printgeschiedenis (2026-10-27)
+- Bridge 0.4.0 leest de `spool_usage`-afboekingen uit SpoolmanSync (`/api/logs`, zonder inlog bereikbaar via `http://172.30.32.1:3005`), groepeert ze per print (binnen 15 min) en publiceert `sensor.printgeschiedenis`. Printnaam, status en voortgang komen van de officiële Bambu-integratie op het moment dat de afboeking wordt gezien.
+- Onderaan het dashboard "Printer Studio" staat de tabel (tijd, print, resultaat, gram per rol, totaal).
+- Getest: lokaal met nagebootste diensten (20 tests); in Home Assistant is aangetoond dat de bridge SpoolmanSync bereikt en de sensor publiceert (0 prints). **Niet getest met een echte afboeking**: die ontstaat pas na de eerste print met een aan een tray gekoppelde rol.
+- De grammen zijn de schatting van SpoolmanSync (gepland gewicht x voortgang), geen meting.
