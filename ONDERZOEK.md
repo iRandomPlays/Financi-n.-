@@ -89,3 +89,9 @@
 - Onderaan het dashboard "Printer Studio" staat de tabel (tijd, print, resultaat, gram per rol, totaal).
 - Getest: lokaal met nagebootste diensten (20 tests); in Home Assistant is aangetoond dat de bridge SpoolmanSync bereikt en de sensor publiceert (0 prints). **Niet getest met een echte afboeking**: die ontstaat pas na de eerste print met een aan een tray gekoppelde rol.
 - De grammen zijn de schatting van SpoolmanSync (gepland gewicht x voortgang), geen meting.
+
+## Rol toevoegen met foto (2026-10-27)
+- Bridge 0.5.0 heeft een tweede poort (8100) met token voor de pc-app in `rolscanner/`; Codex CLI leest het label lokaal op de pc, de gebruiker controleert de velden, daarna gaat de rol naar Spoolman en (autoCreate) naar Bambu.
+- **Getest in Home Assistant** met een testrol: token aanmaken, poort 8100 weigert zonder token (401) en toont de normale bridge-API niet, rol toevoegen via poort 8100 (nieuwe leverancier, filament met nozzle 215 en bed 58 °C, rol 333 g), rol verscheen binnen één stap in Bambu met de juiste kleurnotatie, daarna opgeruimd (rol, filament, leverancier; Bambu-rol is door de bridge verwijderd).
+- **Lokaal getest** (27 tests, nagebootste diensten): validatie, hergebruik van bestaand filament, token en blokkade, nagebootste `codex`, rolscanner-server.
+- **Niet getest**: de echte Codex CLI (opdrachtregel en leeskwaliteit van jouw labels), en de webpagina in een echte browser of op een telefoon.
