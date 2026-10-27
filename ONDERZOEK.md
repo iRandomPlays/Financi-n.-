@@ -95,3 +95,7 @@
 - **Getest in Home Assistant** met een testrol: token aanmaken, poort 8100 weigert zonder token (401) en toont de normale bridge-API niet, rol toevoegen via poort 8100 (nieuwe leverancier, filament met nozzle 215 en bed 58 °C, rol 333 g), rol verscheen binnen één stap in Bambu met de juiste kleurnotatie, daarna opgeruimd (rol, filament, leverancier; Bambu-rol is door de bridge verwijderd).
 - **Lokaal getest** (27 tests, nagebootste diensten): validatie, hergebruik van bestaand filament, token en blokkade, nagebootste `codex`, rolscanner-server.
 - **Niet getest**: de echte Codex CLI (opdrachtregel en leeskwaliteit van jouw labels), en de webpagina in een echte browser of op een telefoon.
+
+## Bambu-profiel ("Type") bij nieuwe rollen (2026-10-27)
+- In Handy kiest de gebruiker bij "Type" merk en profiel (bijv. SUNLU PLA C220); dat is `filamentId`. De openbare bibliotheek (`/filament/config`, vraagt inlog) bevat 99 profielen in 6 merken, maar bij SUNLU **niet** PLA C210 en C220 (wel Matte, PETG, Marble, PLA+, PLA+ 2.0, Silk PLA+, Wood PLA). Een eerdere aanname dat C210/C220 "vaste bibliotheekprofielen" zijn, klopte dus niet; hun ID's (`P9877e1f`, `Paed3d28`) komen uit het eigen account.
+- De bridge (0.6.1) combineert profielen van bestaande rollen met de bibliotheek en gokt niet. Lokaal getest (33 tests, incl. een bibliotheek zonder C220). **Nog niet getest in Home Assistant met een echte aanmaak** en niet getest of Handy de zo aangemaakte rol met het juiste Type toont.

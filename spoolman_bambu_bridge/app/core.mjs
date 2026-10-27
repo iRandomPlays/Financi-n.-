@@ -7,9 +7,9 @@ import crypto from 'node:crypto';
 import { HaPublisher, buildStates, STATUS_ID } from './publish.mjs';
 import { fetchUsageLogs, ingest, historyState } from './history.mjs';
 import { quickAdd, catalog } from './quickadd.mjs';
-import { listProfiles, matchProfile } from './profiles.mjs';
+import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
 
-export const VERSION = '0.6.0';
+export const VERSION = '0.6.1';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -338,15 +338,16 @@ export class Bridge {
     if (!this.profileCache || Date.now() - this.profileCache.at > 3600e3) this.profileCache = { at: Date.now(), list: listProfiles(await bambu.filamentConfig()) };
     return this.profileCache.list;
   }
-  async findProfile(bambu, spool) {
-    try {
-      const p = matchProfile(await this.profileList(bambu), spool);
-      this.store.log(p ? 'info' : 'warn', p ? `Bambu-profiel voor Spoolman #${spool.id}: ${p.vendor} ${p.name} (${p.id})` : `Geen Bambu-profiel gevonden voor Spoolman #${spool.id} (${spool.brand} ${spool.name}); type blijft leeg`);
-      return p;
-    } catch (e) {
-      this.store.log('warn', `Profielenbibliotheek niet beschikbaar: ${e.message}`);
-      return null;
-    }
+  // rolls: bestaande rollen in Bambu; hun profielen gaan voor (die kent jouw account), de bibliotheek vult aan.
+  async findProfile(bambu, spool, rolls = []) {
+    const own = deriveProfiles(rolls);
+    const seen = new Set(own.map((p) => `${p.id}|${p.name.toLowerCase()}`));
+    let lib = [];
+    try { lib = (await this.profileList(bambu)).filter((p) => !seen.has(`${p.id}|${p.name.toLowerCase()}`)); }
+    catch (e) { this.store.log('warn', `Profielenbibliotheek niet beschikbaar (${e.message}); alleen profielen van je bestaande rollen gebruikt`); }
+    const p = matchProfile([...own, ...lib], spool);
+    this.store.log(p ? 'info' : 'warn', p ? `Bambu-profiel voor Spoolman #${spool.id}: ${p.vendor} ${p.name} (${p.id})` : `Geen Bambu-profiel gevonden voor Spoolman #${spool.id} (${spool.brand} ${spool.name}); type blijft leeg`);
+    return p;
   }
   async spoolmanCheck() {
     try {
@@ -384,13 +385,14 @@ export class Bridge {
     if (spool.remainingWeight == null) throw new HttpError('Rol heeft geen bekend gewicht; stel dat eerst in Spoolman in', 400);
     const bambu = this.bambu();
     const marker = markerFor(spoolmanId);
-    const existing = (await bambu.listFilaments()).find((c) => (c.note || '').includes(marker));
+    const rolls = await bambu.listFilaments();
+    const existing = rolls.find((c) => (c.note || '').includes(marker));
     let bambuId = existing?.id;
     if (!bambuId) {
       if (!this.s.pendingCreates.some((p) => p.spoolmanId === spoolmanId)) this.s.pendingCreates.push({ spoolmanId, marker, startedAt: new Date().toISOString() });
       await this.store.save();
       try {
-        const profile = await this.findProfile(bambu, spool);
+        const profile = await this.findProfile(bambu, spool, rolls);
         const r = await bambu.createFilament(bambuCreateBody(spool, marker, profile));
         bambuId = r?.id ?? r?.data?.id;
       } catch (e) {

@@ -1,7 +1,10 @@
 # Wijzigingen
 
+## 0.6.1
+- Zie 0.6.0; profielen van bestaande rollen gaan voor, de terugval op één profiel per merk is verwijderd, en een niet bereikbare bibliotheek laat de profielen van bestaande rollen intact.
+
 ## 0.6.0
-- Nieuwe Bambu-rollen krijgen het bijpassende profiel uit Bambu's bibliotheek (het "Type" in Handy en Studio, `filamentId`), gezocht op merk, materiaal en productnaam. Is er geen eenduidig profiel, dan blijft het type leeg en staat dat in de activiteit. `GET /api/bambu/profiles` toont de bibliotheek. De bibliotheek vraagt een Bambu-inlog.
+- Nieuwe Bambu-rollen krijgen het bijpassende profiel (het "Type" in Handy en Studio, `filamentId`), gezocht op merk, materiaal en productnaam. Bron: eerst de profielen van je bestaande rollen in Bambu (daar staan ook profielen die niet in de openbare bibliotheek zitten, zoals SUNLU PLA C210/C220), daarna Bambu's openbare bibliotheek (vraagt een Bambu-inlog). Geen eenduidige match: het type blijft leeg en dat staat in de activiteit; er wordt nooit gegokt. `GET /api/bambu/profiles` toont de bibliotheek.
 - Rolscanner: knoppen voor nozzletemperatuur 190, 210 en 220.
 
 ## 0.5.0

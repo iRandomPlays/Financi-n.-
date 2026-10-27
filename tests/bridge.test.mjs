@@ -269,19 +269,31 @@ test('geschiedenis: bridge publiceert sensor.printgeschiedenis met printnaam uit
 });
 
 test('aanmaken in Bambu: profiel uit de bibliotheek (met inlog) en terugval zonder bibliotheek', async () => {
-  const catalog = { filamentSettings: [{ filamentVendor: 'SUNLU', filamentType: 'PLA', filamentName: 'PLA C220', filamentId: 'P9877e1f', isSupport: false }] };
-  const sm = { brand: 'Sunlu', name: 'PLA C220 Zwart' };
-  const mk = (id) => ({ id, remaining_weight: 1000, initial_weight: 1000, archived: false, filament: { name: sm.name, material: 'PLA', color_hex: '161616', vendor: { name: sm.brand } } });
-  const t = await setup({ spools: [mk(1)] });
+  // Bibliotheek zonder C220 (zoals in werkelijkheid); de gebruiker heeft al een rol met dat profiel in zijn account.
+  const catalog = { filamentSettings: [{ filamentVendor: 'SUNLU', filamentType: 'PLA', filamentName: 'PLA Matte', filamentId: 'GFSNL02', isSupport: false },
+    { filamentVendor: 'SUNLU', filamentType: 'PETG', filamentName: 'PETG', filamentId: 'GFSNL08', isSupport: false }] };
+  const existing = { id: 7025377, filamentVendor: 'SUNLU', filamentType: 'PLA', filamentName: 'PLA C220', filamentId: 'P9877e1f', netWeight: 1000, note: '' };
+  const mk = (id, name = 'PLA C220 Zwart', material = 'PLA') => ({ id, remaining_weight: 1000, initial_weight: 1000, archived: false, filament: { name, material, color_hex: '161616', vendor: { name: 'Sunlu' } } });
+  const t = await setup({ spools: [mk(1)], cloud: [existing] });
   t.bambu.catalog = catalog;
-  await t.bridge.createBambuFor(1);
-  const c = t.bambu.cloud[0];
+  await t.bridge.createBambuFor(1); // profiel komt van de bestaande rol
+  const c = t.bambu.cloud.find((x) => x.note === '[spoolman:1]');
   assert.deepEqual([c.filamentVendor, c.filamentType, c.filamentName, c.filamentId], ['SUNLU', 'PLA', 'PLA C220', 'P9877e1f']);
   assert.ok(t.store.state.activity.some((a) => /Bambu-profiel voor Spoolman #1/.test(a.message)));
-  // bibliotheek niet beschikbaar: rol wordt toch aangemaakt, zonder type, met melding
-  t.sm.spools.push(mk(2)); t.bambu.catalog = null; t.bridge.profileCache = null;
+  // PETG: komt uit de bibliotheek (met inlog)
+  t.sm.spools.push(mk(2, 'PETG Zwart', 'PETG'));
   await t.bridge.createBambuFor(2);
-  assert.equal(t.bambu.cloud[1].filamentId, ''); assert.equal(t.bambu.cloud[1].filamentName, 'PLA C220 Zwart');
+  assert.equal(t.bambu.cloud.find((x) => x.note === '[spoolman:2]').filamentId, 'GFSNL08');
+  // bibliotheek niet beschikbaar: profiel van bestaande rol blijft werken, melding in activiteit
+  t.sm.spools.push(mk(3)); t.bambu.catalog = null; t.bridge.profileCache = null;
+  await t.bridge.createBambuFor(3);
+  assert.equal(t.bambu.cloud.find((x) => x.note === '[spoolman:3]').filamentId, 'P9877e1f');
   assert.ok(t.store.state.activity.some((a) => /Profielenbibliotheek niet beschikbaar/.test(a.message)));
+  // onbekend product: geen gok, type leeg, rol wordt wel aangemaakt
+  t.sm.spools.push(mk(4, 'Mysterie Rood')); t.bambu.catalog = catalog; t.bridge.profileCache = null;
+  await t.bridge.createBambuFor(4);
+  const m = t.bambu.cloud.find((x) => x.note === '[spoolman:4]');
+  assert.equal(m.filamentId, ''); assert.equal(m.filamentName, 'PLA Mysterie Rood');
+  assert.ok(t.store.state.activity.some((a) => /Geen Bambu-profiel gevonden voor Spoolman #4/.test(a.message)));
   t.close();
 });
