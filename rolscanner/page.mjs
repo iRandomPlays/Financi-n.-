@@ -22,6 +22,8 @@ button{background:var(--acc);color:#fff;border:0;min-height:48px;cursor:pointer;
 #labelPrint{display:flex;gap:14px;align-items:center;background:#fff;color:#000;border-radius:8px;padding:10px}
 #labelText{font-size:.95rem;line-height:1.3}#labelText b{display:block;font-size:1.05rem}
 @media print{body *{visibility:hidden}#labelPrint,#labelPrint *{visibility:visible}#labelPrint{position:absolute;left:0;top:0;padding:4mm}}
+label.chk{display:flex;gap:8px;align-items:center;font-size:1rem;opacity:1;margin:4px 0 8px}
+details summary{cursor:pointer;padding:6px 0}
 .chips{display:flex;gap:8px;margin-top:6px}.chip{flex:1;width:auto;margin:0;min-height:42px;background:#8885;color:var(--fg)}.chip.on{background:var(--acc);color:#fff}
 ul{padding-left:18px;margin:6px 0}
 </style></head><body><main>
@@ -45,10 +47,25 @@ ul{padding-left:18px;margin:6px 0}
 <div id="msg" role="status"></div></section>
 <section id="labelSec" hidden><h2>QR-label van de laatste rol</h2>
 <div id="labelPrint"><div id="qr"></div><div id="labelText"></div></div>
-<button id="printLabel" class="sec" type="button">Label afdrukken</button><div id="labelUrl" style="font-size:.8rem;opacity:.7;margin-top:6px;word-break:break-all"></div></section>
+<div class="row"><button id="btPrint" type="button" hidden>Afdrukken naar Niimbot</button><button id="printLabel" class="sec" type="button">Label afdrukken (scherm)</button></div>
+<div id="labelUrl" style="font-size:.8rem;opacity:.7;margin-top:6px;word-break:break-all"></div></section>
+<section id="printerSec"><h2>Label-printer (Niimbot)</h2>
+<div id="btHint" class="bad" hidden></div>
+<div id="btControls" hidden>
+<label class="chk"><input id="autoPrint" type="checkbox" style="width:auto"> Direct afdrukken na opslaan</label>
+<div class="row"><button id="btConnect" type="button" class="sec">Verbind printer</button><button id="btTest" type="button" class="sec">Testlabel</button></div>
+<div id="btStatus" style="margin-top:8px"></div>
+<details style="margin-top:8px"><summary>Instellingen label en printer</summary>
+<div class="row"><div><label for="lenmm">Label lengte (mm)</label><input id="lenmm" type="number" min="10" max="100" value="30"></div>
+<div><label for="widmm">Label breedte (mm)</label><input id="widmm" type="number" min="8" max="24" value="20"></div></div>
+<div class="row"><div><label for="density">Dichtheid (1-3)</label><select id="density"><option value="">Standaard</option><option>1</option><option>2</option><option>3</option></select></div>
+<div><label for="ptask">Print task</label><select id="ptask"><option value="">Automatisch</option></select></div></div>
+<div style="font-size:.8rem;opacity:.75;margin-top:6px">Komt het label verschoven of blanco uit, probeer dan een andere print task (bijv. B1 of D110M_V4) en tik op Testlabel.</div>
+</details></div></section>
 <section><h2>Toegevoegd in deze sessie</h2><ul id="done"></ul></section>
 <datalist id="brands"></datalist><datalist id="materials"><option value="PLA"><option value="PETG"><option value="ABS"><option value="ASA"><option value="TPU"><option value="PA"><option value="PC"><option value="PVA"></datalist>
 </main>
+<script src="vendor/niimbluelib.min.js"></script>
 <script>
 /*QR*/
 var $ = function (id) { return document.getElementById(id); };
@@ -63,12 +80,111 @@ function qrSvg(text, px) {
 function showLabel(j) {
   if (!INFO.labelBaseUrl) { $('labelSec').hidden = true; return; }
   var url = INFO.labelBaseUrl + '/scan/spool/' + j.spoolId;
+  BT.last = { id: j.spoolId, url: url, name: j.name, weight: j.weight, location: j.location || '' }; $('btPrint').hidden = !btOk();
   $('qr').innerHTML = qrSvg(url, 150);
   $('labelText').innerHTML = '<b>#' + esc(j.spoolId) + ' ' + esc(j.name) + '</b>' + esc(j.weight) + ' g' + (j.location ? ' &middot; ' + esc(j.location) : '');
   $('labelUrl').textContent = url; $('labelSec').hidden = false;
 }
 $('printLabel').onclick = function () { window.print(); };
 fetch('api/info').then(function (r) { return r.json(); }).then(function (j) { INFO = j; }).catch(function () {});
+
+// ---- Niimbot-printer via Web Bluetooth (niimbluelib) ----
+var BT = { client: null, last: null };
+function btOk() { return !!(window.niimbluelib && navigator.bluetooth); }
+function btSay(t, cls) { $('btStatus').textContent = t; $('btStatus').className = cls || ''; }
+function numOr(v, d) { var n = Number(v); return isFinite(n) && n > 0 ? n : d; }
+function labelDims() {
+  var len = Math.max(10, Math.min(100, numOr($('lenmm').value, 30)));
+  var wid = Math.max(8, Math.min(24, numOr($('widmm').value, 20)));
+  return { w: Math.round(len * 8), h: Math.round(wid * 8) }; // 203 dpi is ongeveer 8 beeldpunten per mm; de printkop is 192 breed
+}
+function labelData(j) { return { id: j.spoolId, url: INFO.labelBaseUrl + '/scan/spool/' + j.spoolId, name: j.name, weight: j.weight, location: j.location || '' }; }
+function wrapText(ctx, text, maxW, maxLines) {
+  var words = String(text).split(/\s+/), lines = [], cur = '';
+  words.forEach(function (w) { var t = cur ? cur + ' ' + w : w; if (!cur || ctx.measureText(t).width <= maxW) cur = t; else { lines.push(cur); cur = w; } });
+  if (cur) lines.push(cur);
+  if (lines.length > maxLines) { lines = lines.slice(0, maxLines); lines[maxLines - 1] += '...'; }
+  return lines;
+}
+// Tekent het label liggend (lengte x breedte van de rol); de bibliotheek draait het voor de printkop. Alleen zwart en wit.
+function drawLabel(canvas, d) {
+  var dim = labelDims(); canvas.width = dim.w; canvas.height = dim.h;
+  var ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, dim.w, dim.h);
+  var m = makeQr(d.url), n = m.length;
+  var k = Math.max(2, Math.floor(Math.min(dim.h, dim.w * 0.62) / (n + 8)));
+  var size = (n + 8) * k, y0 = Math.floor((dim.h - size) / 2);
+  ctx.fillStyle = '#000';
+  for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (m[r][c]) ctx.fillRect((c + 4) * k, y0 + (r + 4) * k, k, k);
+  var tx = size + 6, tw = dim.w - tx - 6;
+  if (tw > 40) {
+    var fs = dim.h >= 150 ? 26 : 20; ctx.textBaseline = 'top';
+    ctx.font = 'bold ' + fs + 'px sans-serif'; var y = Math.max(4, Math.floor(dim.h * 0.1)); ctx.fillText('#' + d.id, tx, y); y += fs + 6;
+    ctx.font = (fs - 4) + 'px sans-serif';
+    wrapText(ctx, d.name, tw, 3).forEach(function (l) { ctx.fillText(l, tx, y); y += fs; });
+    ctx.fillText(d.weight + ' g' + (d.location ? ' - ' + d.location : ''), tx, y + 2);
+  }
+  var img = ctx.getImageData(0, 0, dim.w, dim.h), px = img.data;
+  for (var i = 0; i < px.length; i += 4) { var v = (0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]) < 150 ? 0 : 255; px[i] = px[i + 1] = px[i + 2] = v; px[i + 3] = 255; }
+  ctx.putImageData(img, 0, 0);
+  return { qrModules: n, moduleDots: k };
+}
+function getClient() {
+  if (!BT.client) {
+    BT.client = new niimbluelib.NiimbotBluetoothClient();
+    BT.client.on('disconnect', function () { btSay('Printer losgekoppeld. Tik op Verbind printer.', 'bad'); });
+  }
+  return BT.client;
+}
+// Moet synchroon vanuit een tik worden aangeroepen: Chrome laat het apparaatkeuzemenu alleen bij een gebaar zien.
+function btConnect() {
+  var c = getClient();
+  if (c.isConnected()) return Promise.resolve(c);
+  btSay('Verbinden... kies je printer in het lijstje.', 'ok');
+  return c.connect().then(function (info) {
+    var meta = c.getModelMetadata();
+    btSay('Verbonden met ' + (info && info.deviceName ? info.deviceName : 'printer') + (meta ? ' (' + meta.model + ')' : ''), 'ok');
+    return c;
+  });
+}
+async function btPrintCanvas(canvas) {
+  var c = BT.client; if (!c || !c.isConnected()) throw new Error('Printer is niet verbonden');
+  var meta = c.getModelMetadata();
+  var taskName = $('ptask').value || c.getPrintTaskType();
+  if (!taskName) throw new Error('Printermodel onbekend: kies een print task bij de instellingen');
+  var density = Number($('density').value) || (meta && meta.densityDefault) || 2;
+  var dir = meta && meta.printDirection ? meta.printDirection : 'left';
+  var enc = niimbluelib.ImageEncoder.encodeCanvas(canvas, niimbluelib.PageColorType.SingleColor, dir);
+  var task = c.protocol.newPrintTask(taskName, { totalPages: 1, density: density, labelType: niimbluelib.LabelType.WithGaps });
+  try {
+    await task.printInit(); await task.printPage(enc, 1); await task.waitForPageFinished(); await task.waitForFinished();
+  } finally { try { await c.protocol.printEnd(); } catch (e) {} }
+}
+async function btPrintLabel(d) {
+  var cv = document.createElement('canvas'); drawLabel(cv, d);
+  btSay('Label wordt afgedrukt...', 'ok'); await btPrintCanvas(cv); btSay('Afgedrukt: #' + d.id, 'ok');
+}
+function btFail(e) { btSay((e && e.message) || String(e), 'bad'); }
+function initBt() {
+  if (!btOk()) {
+    var secure = window.isSecureContext;
+    $('btHint').hidden = false;
+    $('btHint').textContent = !window.niimbluelib ? 'De printerbibliotheek is niet geladen (map vendor ontbreekt?).'
+      : !secure ? 'Bluetooth-printen is hier niet beschikbaar: Chrome staat Bluetooth alleen toe op https:// of localhost. Zet in chrome://flags de optie "Insecure origins treated as secure" aan met dit adres: ' + location.origin
+      : 'Deze browser ondersteunt geen Web Bluetooth. Gebruik Chrome op Android.';
+    return;
+  }
+  $('btControls').hidden = false;
+  window.niimbluelib.printTaskNames.forEach(function (n) { var o = document.createElement('option'); o.value = n; o.textContent = n; $('ptask').appendChild(o); });
+  ['lenmm', 'widmm', 'density', 'ptask'].forEach(function (k) { if (recall(k)) $(k).value = recall(k); $(k).addEventListener('change', function () { store(k, $(k).value); }); });
+  $('autoPrint').checked = recall('autoprint') !== 'nee'; $('autoPrint').addEventListener('change', function () { store('autoprint', $('autoPrint').checked ? 'ja' : 'nee'); });
+  $('btConnect').onclick = function () { btConnect().catch(btFail); };
+  $('btTest').onclick = function () {
+    var d = { id: 0, url: (INFO.labelBaseUrl || 'http://homeassistant.local:3005') + '/scan/spool/0', name: 'Testlabel', weight: 0, location: '' };
+    btConnect().then(function () { return btPrintLabel(d); }).catch(btFail);
+  };
+  $('btPrint').onclick = function () { if (!BT.last) return; btConnect().then(function () { return btPrintLabel(BT.last); }).catch(btFail); };
+}
 var CAT = { types: [], locations: [] };
 function store(k, v) { try { localStorage.setItem('rol.' + k, v); } catch (e) {} }
 function recall(k) { try { return localStorage.getItem('rol.' + k) || ''; } catch (e) { return ''; } }
@@ -147,6 +263,9 @@ $('photo').addEventListener('change', async function () {
   } catch (e) { $('reading').textContent = ''; say(e.message, 'bad'); }
 });
 $('save').onclick = async function () {
+  // De printer-verbinding moet in deze tik starten (vóór de eerste await), anders blokkeert Chrome het keuzemenu.
+  var connectP = null;
+  if (btOk() && $('autoPrint').checked) connectP = btConnect().catch(function (e) { btFail(e); return null; });
   $('save').disabled = true; say('Opslaan...');
   var body = { brand: $('brand').value, material: $('material').value, name: $('name').value, colorHex: $('hex').value, weight: $('weight').value, nozzle: $('nozzle').value, bed: $('bed').value, location: $('loc').value, typeKey: $('type').value };
   try {
@@ -154,6 +273,10 @@ $('save').onclick = async function () {
     var j = await r.json(); if (!r.ok) throw new Error(j.error || 'Opslaan mislukt');
     var li = document.createElement('li'); li.textContent = '#' + j.spoolId + ' ' + j.name + ' – ' + j.weight + ' g' + (j.location ? ' – ' + j.location : '') + (j.filamentReused ? ' (bestaand filament)' : ''); $('done').prepend(li);
     resetFields(); say('Opgeslagen als Spoolman #' + j.spoolId + '. Volgende rol!', 'ok'); showLabel(j); loadCatalog();
+    if (connectP && BT.last) { // direct afdrukken; mislukt het, dan is de rol al opgeslagen en kan het label opnieuw
+      if (await connectP) { try { await btPrintLabel(BT.last); } catch (e2) { btSay('Afdrukken mislukt: ' + e2.message + '. Tik op "Afdrukken naar Niimbot" om opnieuw te proberen.', 'bad'); } }
+      else say('Opgeslagen als Spoolman #' + j.spoolId + ', maar de printer is niet verbonden. Tik op "Afdrukken naar Niimbot".', 'bad');
+    }
   } catch (e) { say(e.message, 'bad'); validate(); }
 };
 async function loadCatalog() {
@@ -163,5 +286,5 @@ async function loadCatalog() {
     if (!sameLists) { var keepLoc = $('loc').value, keepType = $('type').value; CAT.types = j.types || []; CAT.locations = j.locations || []; fillSelects(); if (keepLoc && CAT.locations.indexOf(keepLoc) >= 0) $('loc').value = keepLoc; if (keepType && CAT.types.some(function (t) { return t.key === keepType; })) $('type').value = keepType; }
   } catch (e) {}
 }
-loadCatalog(); validate();
+loadCatalog(); validate(); initBt();
 </script></body></html>`.replace('/*QR*/', () => makeQr.toString());

@@ -38,3 +38,24 @@ Bestaat het filament al in Spoolman (zelfde merk, materiaal, naam en kleur), dan
 ## QR-label na het opslaan
 Na "Opslaan en volgende rol" verschijnt onderaan het **QR-label van die rol** (`labelBaseUrl` uit de config, standaard `http://homeassistant.local:3005`, plus `/scan/spool/<id>`). Scannen met de gewone camera van je telefoon opent de pagina van SpoolmanSync waar je de tray kiest. Met **Label afdrukken** print je alleen het label. Het adres klopt alleen op je eigen wifi en als `homeassistant.local` op je telefoon werkt; zo niet, zet dan het vaste IP van je Home Assistant in `labelBaseUrl`.
 De QR-generator zit zelf in de map (`qr.mjs`, geen bibliotheek). Het label is bij de bouw uit een echte browser-weergave uitgelezen met OpenCV.
+
+## Direct printen naar de Niimbot D101
+Op de pagina staat het onderdeel **Label-printer (Niimbot)**. Met "Direct afdrukken na opslaan" aan, wordt het QR-label automatisch afgedrukt zodra je op "Opslaan en volgende rol" tikt. Je telefoon maakt dan via Bluetooth verbinding met de printer; de pc doet daar niets mee.
+
+**Eenmalig instellen (Android, Chrome)**
+1. Zet de rolscanner op `"host": "0.0.0.0"` en geef je pc een vast IP in je router.
+2. Chrome staat Bluetooth alleen toe op `https://` of `localhost`. Zet daarom in `chrome://flags` de optie **Insecure origins treated as secure** op *Ingeschakeld*, met `http://<ip-van-je-pc>:8787` in het tekstvak (met `http://` en poort), en start Chrome opnieuw.
+3. Sluit de Niimbot-app volledig af; de printer praat met één apparaat tegelijk.
+4. Open `http://<ip-van-je-pc>:8787`, tik op **Verbind printer** en kies je D101. Test met **Testlabel**.
+
+**Gebruik**
+- Bij de eerste rol na het openen van de pagina verschijnt het keuzemenu voor de printer in dezelfde tik als het opslaan. Daarna blijft de verbinding actief.
+- Mislukt het afdrukken of is de printer niet verbonden, dan is de rol al opgeslagen. Tik op **Afdrukken naar Niimbot** om het label opnieuw te sturen.
+- Onder "Instellingen label en printer" stel je de **labelmaat** in (standaard 30 x 20 mm: lengte x breedte, breedte maximaal 24 mm), de dichtheid (1-3) en de **print task**. Komt het label blanco of verschoven uit, probeer dan een andere print task (bijv. B1 of D110M_V4), zoals ook NiimBlue adviseert, en tik op Testlabel.
+
+**Wat het label bevat:** een QR-code (3 punten per blokje, 4 blokjes lege rand, alleen zwart en wit), het rolnummer, de naam, het gewicht en de locatie.
+
+**Wat bewezen is en wat niet**
+- Getest in Chromium met de echte bibliotheek (label tekenen, omzetten naar 160 x 240 punten voor de printkop, QR uitlezen met OpenCV) en met een nagebootste printer (volgorde van verbinden en afdrukken, annuleren, afdrukfout, testlabel). Zie `tests/browser/printen.browser.cjs`.
+- **Niet getest met een echte D101.** Dat de verbinding via de Chrome-vlag werkt, welke print task goed is en of de rotatie klopt, blijkt bij de eerste afdruk. NiimBlue (https://niim.blue) verbond bij de gebruiker wel met de D101.
+- De printerbibliotheek is `@mmote/niimbluelib` 0.47.1 (MIT) in `vendor/`.

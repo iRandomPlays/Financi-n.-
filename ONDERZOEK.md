@@ -112,3 +112,9 @@
 - **Getest:** eigen QR-generator (`rolscanner/qr.mjs`) uitgelezen met OpenCV voor 13 teksten, versie 1 t/m 10, ook met speciale tekens; de pagina in een echte browser (Chromium, telefoonbreedte) met nagebootste bridge en Codex: locatie en type kiezen, nozzle invullen, foto lezen, opslaan, label tonen en uitlezen uit het scherm, locatie en type blijven na opslaan en herladen staan.
 - **Niet getest:** de echte Codex CLI met echte labels, het afdrukken op een labelprinter, en of `homeassistant.local` op de telefoon van de gebruiker wordt gevonden of een scan daadwerkelijk de tray-keuze opent.
 - SpoolmanSync-instelling `syncSpoolmanLocation` staat uit; moet uit blijven, anders zou SpoolmanSync de locatie (Vincent/Ine) overschrijven met de tray.
+
+## Direct printen naar de Niimbot D101 (2026-10-27)
+- Onderzoek: `reports/Niimbot D101 QR printen via Android.md`. Praktijk: Chrome 156 op de Android-telefoon van de gebruiker heeft de vlag "Insecure origins treated as secure"; `https://niim.blue` verbond met de D101.
+- Gebouwd in de rolscanner: Web Bluetooth-printknop met `@mmote/niimbluelib` 0.47.1 (meegeleverd in `rolscanner/vendor/`, MIT), label tekenen (liggend, zwart-wit, QR 3 punten per blokje), verbinden in dezelfde tik als opslaan, herprinten, testlabel, instelbare labelmaat/dichtheid/print task.
+- **Getest:** echte bibliotheek in Chromium (coderen naar 160 x 240 voor een label van 30 x 20 mm, geen grijstinten, QR leesbaar met OpenCV) en nagebootste printer (volgorde, annuleren, afdrukfout, testlabel, uitgeschakelde automatische afdruk, uitleg bij onveilig adres).
+- **Niet getest:** een echte afdruk op de D101. Open punten: werkt Bluetooth via de Chrome-vlag, welke print task (B1 of D110M_V4), draairichting en uitlijning, blanco eerste label na inschakelen (niimblue #108), labelmaat.

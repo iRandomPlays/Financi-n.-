@@ -175,3 +175,15 @@ test('instellingen: locaties en typen worden gevalideerd', async () => {
   await assert.rejects(() => b.updateSettings({ rolTypes: [t, t] }), /dubbele/);
   await assert.rejects(() => b.updateSettings({ rolTypes: [{ ...t, profile: { vendor: 'V', name: 'N' } }] }), /verplicht/);
 });
+
+test('rolscanner serveert de meegeleverde printerbibliotheek en de labelinstelling', async () => {
+  const sc = createScanner({ bridgeUrl: '', token: '', labelBaseUrl: 'http://homeassistant.local:3005/' });
+  await new Promise((r) => sc.listen(0, '127.0.0.1', r));
+  const lib = await fetch(`${url(sc)}/vendor/niimbluelib.min.js`);
+  assert.equal(lib.status, 200); assert.match(lib.headers.get('content-type'), /javascript/);
+  assert.match(await lib.text(), /NiimbotBluetoothClient/);
+  assert.deepEqual(await (await fetch(`${url(sc)}/api/info`)).json(), { labelBaseUrl: 'http://homeassistant.local:3005' });
+  const page = await (await fetch(url(sc))).text();
+  assert.ok(page.includes('vendor/niimbluelib.min.js') && page.includes('Afdrukken naar Niimbot'));
+  sc.close();
+});

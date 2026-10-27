@@ -109,6 +109,10 @@ export function createScanner(cfg, { fetchImpl = fetch, read = readLabel } = {})
     try {
       const p = new URL(req.url, 'http://x').pathname;
       if (req.method === 'GET' && p === '/') return send(200, PAGE, 'text/html; charset=utf-8');
+      if (req.method === 'GET' && p === '/vendor/niimbluelib.min.js') {
+        try { return send(200, await fs.readFile(path.join(here, 'vendor', 'niimbluelib.min.js')), 'text/javascript; charset=utf-8'); }
+        catch { return send(404, { error: 'niimbluelib ontbreekt in rolscanner/vendor' }); }
+      }
       if (req.method === 'GET' && p === '/api/info') return send(200, { labelBaseUrl: String(cfg.labelBaseUrl || '').replace(/\/+$/, '') });
       if (req.method === 'GET' && p === '/api/catalog') return send(200, await bridge(cfg, 'GET', '/api/quick-add/catalog', null, fetchImpl));
       const readBody = async (limit) => {
