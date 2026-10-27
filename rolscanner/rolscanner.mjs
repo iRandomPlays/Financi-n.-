@@ -141,7 +141,8 @@ export function createScanner(cfg, { fetchImpl = fetch, read = readLabel } = {})
 
 export async function loadConfig(file = path.join(here, 'rolscanner.config.json')) {
   let cfg = {};
-  try { cfg = JSON.parse((await fs.readFile(file, 'utf8')).replace(/^﻿/, '')); } // Kladblok en PowerShell zetten soms een BOM voor het bestand catch (e) { if (e.code !== 'ENOENT') throw new Error(`Config onleesbaar: ${e.message}`); }
+  // Kladblok en PowerShell zetten soms een BOM (onzichtbaar teken) voor het bestand; dat negeren we.
+  try { cfg = JSON.parse((await fs.readFile(file, 'utf8')).replace(/^\uFEFF/, '')); } catch (e) { if (e.code !== 'ENOENT') throw new Error(`Config onleesbaar: ${e.message}`); }
   return {
     port: 8787, host: '127.0.0.1', codexBin: 'codex', codexArgs: [], timeoutSec: 120,
     labelBaseUrl: 'http://homeassistant.local:3005', // waar de QR-code van een rol naartoe wijst (SpoolmanSync, poort 3005)
