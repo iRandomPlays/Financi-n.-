@@ -66,6 +66,13 @@ export class HaPublisher {
     const res = await this.fetchImpl(`${this.base}/states/${id}`, { headers: { authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(10000) });
     return res.ok ? res.json() : null;
   }
+  // Alle entiteiten met hun toestand (alleen lezen), bijv. voor de AMS-vakken.
+  async listStates() {
+    if (!this.enabled) return [];
+    const res = await this.fetchImpl(`${this.base}/states`, { headers: { authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`HA ${res.status}`);
+    return res.json();
+  }
   // Zet alle sensoren en ruimt sensoren op van rollen die niet meer bestaan.
   async publish(states, { cleanup = true } = {}) {
     if (!this.enabled) return { skipped: true };

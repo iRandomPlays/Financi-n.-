@@ -1,5 +1,8 @@
 # Wijzigingen
 
+## 0.8.0
+- Originele Bambu-rollen met RFID worden automatisch in Spoolman gezet. Elke minuut leest de bridge de AMS-vakken uit Home Assistant (sensoren met `tray_uuid` en `tag_uid`); staat het RFID-nummer nog niet in `extra.tag` van een rol, dan maakt de bridge de rol aan (leverancier Bambu Lab, filament uit naam, materiaal en kleur van het vak, gewicht en verbruikt gewicht uit `tray_weight` en `remain`). SpoolmanSync herkent de rol daarna aan het RFID-nummer. Rollen zonder chip (Sunlu e.d.) worden genegeerd, gearchiveerde rollen tellen mee als bestaand. Instelling `rfidAutoAdd` (standaard aan); het extra veld `tag` wordt zo nodig in Spoolman aangemaakt.
+
 ## 0.7.0
 - Vaste rol-typen voor de rolscanner (SUNLU PLA C190, C210, C220 en PETG Basic), elk vast gekoppeld aan jouw eigen Bambu-profiel (`filament_id` uit je account). Een rol die met een type wordt toegevoegd, krijgt in Bambu precies dat profiel. Typen en locaties zijn instelbaar (`rolTypes`, `locations` in de instellingen).
 - Locatie (bijv. Vincent of Ine) wordt bij het toevoegen in Spoolman op de rol gezet (veld "Locatie") en niet naar Bambu gestuurd.
