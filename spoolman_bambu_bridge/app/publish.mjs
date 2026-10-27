@@ -61,6 +61,11 @@ export class HaPublisher {
     });
     if (!res.ok && !(method === 'DELETE' && res.status === 404)) throw new Error(`HA ${res.status}`);
   }
+  async getState(id) {
+    if (!this.enabled) return null;
+    const res = await this.fetchImpl(`${this.base}/states/${id}`, { headers: { authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(10000) });
+    return res.ok ? res.json() : null;
+  }
   // Zet alle sensoren en ruimt sensoren op van rollen die niet meer bestaan.
   async publish(states, { cleanup = true } = {}) {
     if (!this.enabled) return { skipped: true };

@@ -1,5 +1,8 @@
 # Wijzigingen
 
+## 0.4.0
+- Printgeschiedenis: leest de afboekingen (`spool_usage`) uit SpoolmanSync, groepeert afboekingen binnen 15 minuten tot één print en publiceert `sensor.printgeschiedenis` (laatste 15 prints met gram per rol). Printnaam, status en voortgang komen uit de officiële Bambu-integratie en worden alleen bij verse afboekingen vastgelegd. Instellingen: SpoolmanSync-URL en printer-prefix.
+
 ## 0.3.0
 - Publiceert de voorraad als sensoren in Home Assistant: `sensor.spoolman_rol_<id>`, `sensor.spoolman_voorraad` (totaal en lijst met rollen) en `sensor.spoolman_bridge_status`. Vereist `homeassistant_api`. Instelling: grens voor lage voorraad (standaard 100 g).
 

@@ -7,6 +7,7 @@ import { promises as fs } from 'node:fs';
 import { Store, Bridge, bambuCreateBody } from '../spoolman_bambu_bridge/app/core.mjs';
 import { analyzeGcode, proposeAbort, gramsFromMm } from '../spoolman_bambu_bridge/app/usage.mjs';
 import { buildStates, HaPublisher } from '../spoolman_bambu_bridge/app/publish.mjs';
+import { ingest, historyState, fetchUsageLogs } from '../spoolman_bambu_bridge/app/history.mjs';
 import { createApp } from '../spoolman_bambu_bridge/app/server.mjs';
 
 const listen = (handler) => new Promise((res) => { const s = http.createServer(handler); s.listen(0, '127.0.0.1', () => res(s)); });
@@ -221,4 +222,47 @@ test('buildStates: onbekend gewicht blijft unknown en archief wordt overgeslagen
   const st = buildStates({ spools: [{ id: 1, remainingWeight: null, archived: false, brand: 'A', name: 'x', material: 'PLA', colorHex: 'FFFFFF' }, { id: 2, remainingWeight: 5, archived: true }], links: [], bambuStatus: 'connected' });
   assert.equal(st['sensor.spoolman_rol_1'].state, 'unknown'); assert.equal(st['sensor.spoolman_rol_2'], undefined);
   assert.equal(st['sensor.spoolman_bridge_status'].state, 'ok');
+});
+
+test('geschiedenis: afboekingen groeperen per print, geen dubbele verwerking, verse print krijgt naam, oude niet', () => {
+  const h = { prints: [], seen: [] };
+  const t0 = Date.parse('2026-10-27T10:00:00Z');
+  const ev = (id, min, spoolId, gram) => ({ id, at: t0 + min * 60000, spoolId, gram, tray: 't' });
+  const spools = [{ id: 1, brand: 'Sunlu', name: 'Wit' }, { id: 2, brand: 'Sunlu', name: 'Rood' }];
+  const ctx = { naam: 'Houder', status: 'finish', voortgang: 100, gepland: 40 };
+  const logs = [ev('a', 0, 1, 18.5), ev('b', 3, 2, 4.25), ev('c', 120, 1, 9), ev('a', 0, 1, 18.5)];
+  assert.equal(ingest(h, logs.slice(0, 3), { spools, context: ctx, now: t0 + 121 * 60000 }), 3);
+  assert.equal(h.prints.length, 2);
+  const newest = h.prints[0], older = h.prints[1];
+  assert.equal(newest.naam, 'Houder'); assert.equal(older.naam, ''); // oudere print: geen naam van nu
+  assert.deepEqual(older.rollen.map((r) => [r.id, r.gram]), [[1, 18.5], [2, 4.3]]);
+  assert.equal(ingest(h, logs, { spools, context: ctx, now: t0 + 121 * 60000 }), 0); // opnieuw: niets nieuws
+  const st = historyState(h);
+  assert.equal(st.state, 2); assert.equal(st.attributes.prints[1].naam, 'Onbekende print'); assert.equal(st.attributes.prints[1].totaal_g, 22.8);
+});
+test('geschiedenis: logs ophalen filtert op spool_usage', async () => {
+  const srv = await listen((req, res) => json(res, 200, { logs: [
+    { id: '1', type: 'spool_usage', createdAt: '2026-10-27T10:00:00Z', details: JSON.stringify({ spoolId: 4, usedWeight: 12.5, trayId: 'x' }) },
+    { id: '2', type: 'tray_change', createdAt: '2026-10-27T10:01:00Z', details: '{}' },
+    { id: '3', type: 'spool_usage', createdAt: '2026-10-27T10:02:00Z', details: 'kapot' }] }));
+  const out = await fetchUsageLogs(`http://127.0.0.1:${srv.address().port}`);
+  assert.deepEqual(out.map((o) => [o.id, o.spoolId, o.gram]), [['1', 4, 12.5]]);
+  srv.close();
+});
+test('geschiedenis: bridge publiceert sensor.printgeschiedenis met printnaam uit HA', async () => {
+  const posted = {};
+  const ha = await listen(async (req, res) => {
+    if (req.method === 'GET') { const id = req.url.split('/').pop(); const v = { 'sensor.p1_taaknaam': 'Doos', 'sensor.p1_printstatus': 'finish', 'sensor.p1_printvoortgang': '100', 'sensor.p1_gewicht_van_print': '31' }[id]; return v === undefined ? json(res, 404, {}) : json(res, 200, { state: v }); }
+    if (req.method === 'POST') posted[req.url.split('/').pop()] = await readBody(req); json(res, 200, {});
+  });
+  const sync = await listen((req, res) => json(res, 200, { logs: [{ id: 'z', type: 'spool_usage', createdAt: new Date().toISOString(), details: JSON.stringify({ spoolId: 1, usedWeight: 7.5 }) }] }));
+  const t = await setup({ spools: [spool(1, 100)] });
+  t.bridge.ha = new HaPublisher({ baseUrl: `http://127.0.0.1:${ha.address().port}/api`, token: 'tok' });
+  await t.bridge.updateSettings({ spoolmansyncUrl: `http://127.0.0.1:${sync.address().port}`, printerPrefix: 'p1' });
+  await t.bridge.syncOnce();
+  const g = posted['sensor.printgeschiedenis'];
+  assert.equal(g.state, 1); assert.equal(g.attributes.prints[0].naam, 'Doos'); assert.equal(g.attributes.prints[0].status, 'finish');
+  assert.equal(g.attributes.prints[0].gepland_g, 31); assert.equal(g.attributes.prints[0].rollen[0].gram, 7.5);
+  await assert.rejects(() => t.bridge.updateSettings({ printerPrefix: 'a b' }));
+  ha.close(); sync.close(); t.close();
 });

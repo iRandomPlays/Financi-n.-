@@ -26,3 +26,6 @@ De bridge boekt **geen** printverbruik af; dat doet SpoolmanSync. Hij leest geen
 
 ## Sensoren in Home Assistant
 Elke ronde publiceert de bridge: `sensor.spoolman_rol_<id>` (resterende grammen met merk, materiaal, kleur, tray, sync-status), `sensor.spoolman_voorraad` (totaal, aantal lage rollen, lijst `rollen`) en `sensor.spoolman_bridge_status` (ok / pauze / fout / niet_ingelogd). Het zijn alleen-lezen sensoren zonder registratie; na een herstart van Home Assistant verschijnen ze bij de volgende ronde weer (maximaal één interval). Bij een Spoolman-storing worden alleen de status bijgewerkt en geen rolsensoren verwijderd.
+
+## Printgeschiedenis
+Vul in de bridge de SpoolmanSync-URL (bijv. `http://172.30.32.1:3005`) en de printer-prefix (bijv. `x2d_20p9bj620700578`) in. De bridge leest dan elke ronde de afboekingen van SpoolmanSync. De grammen zijn wat SpoolmanSync afboekt (gepland gewicht x voortgang): een schatting, geen meting. Naam, status en voortgang van een print worden vastgelegd op het moment dat de afboeking wordt gezien; bij afboekingen die al ouder zijn dan 30 minuten blijft de naam leeg ("Onbekende print").

@@ -5,8 +5,9 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { HaPublisher, buildStates, STATUS_ID } from './publish.mjs';
+import { fetchUsageLogs, ingest, historyState } from './history.mjs';
 
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -52,10 +53,11 @@ async function request(url, { method = 'GET', headers = {}, body, timeoutMs = 20
 
 const EMPTY_STATE = () => ({
   version: 1,
-  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, lowStockGrams: 100, region: 'us' },
+  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us' },
   bambu: { token: '', email: '', status: 'disconnected' },
   links: [], // { id, spoolmanId, bambuId, paused, pauseReason, lastSyncedGrams, lastSyncAt, lastError, createdAt }
   pendingCreates: [], // { spoolmanId, marker, startedAt }
+  history: { prints: [], seen: [] },
   activity: [],
 });
 
@@ -228,6 +230,16 @@ export class Bridge {
     }
     if (patch.autoSync !== undefined) st.autoSync = !!patch.autoSync;
     if (patch.autoCreate !== undefined) st.autoCreate = !!patch.autoCreate;
+    for (const k of ['spoolmansyncUrl']) if (patch[k] !== undefined) {
+      const u = String(patch[k]).trim();
+      if (u && !/^https?:\/\//.test(u)) throw new HttpError('SpoolmanSync-URL moet met http:// of https:// beginnen', 400);
+      st[k] = u;
+    }
+    if (patch.printerPrefix !== undefined) {
+      const p = String(patch.printerPrefix).trim().toLowerCase();
+      if (p && !/^[a-z0-9_]+$/.test(p)) throw new HttpError('Printerprefix mag alleen letters, cijfers en _ bevatten', 400);
+      st.printerPrefix = p;
+    }
     if (patch.lowStockGrams !== undefined) {
       const g = Math.round(Number(patch.lowStockGrams));
       if (!Number.isFinite(g) || g < 0 || g > 1000) throw new HttpError('Grens voor lage voorraad moet tussen 0 en 1000 g liggen', 400);
@@ -423,13 +435,41 @@ export class Bridge {
         await this.ha.publish({ [STATUS_ID]: st[STATUS_ID] }, { cleanup: false });
         return;
       }
+      const states = buildStates({ spools: list, links: this.s.links, lowStockGrams: this.s.settings.lowStockGrams, bambuStatus: this.s.bambu.status, lastRound: this.lastRound, running: this.running });
+      await this.updateHistory(list).catch((e) => this.logOnce('history', `Printgeschiedenis bijwerken mislukt: ${e.message}`));
+      states['sensor.printgeschiedenis'] = historyState(this.s.history);
       // Verwijderde/gearchiveerde rollen worden door publish() opgeruimd; ze staan niet meer in 'states'.
-      await this.ha.publish(buildStates({ spools: list, links: this.s.links, lowStockGrams: this.s.settings.lowStockGrams, bambuStatus: this.s.bambu.status, lastRound: this.lastRound, running: this.running }));
+      await this.ha.publish(states);
       this.lastPublishError = '';
     } catch (e) {
       if (this.lastPublishError !== e.message) this.store.log('warn', `Publiceren naar Home Assistant mislukt: ${e.message}`);
       this.lastPublishError = e.message;
     }
+  }
+  logOnce(key, msg) {
+    this.logged ??= {};
+    if (this.logged[key] !== msg) this.store.log('warn', msg);
+    this.logged[key] = msg;
+  }
+  // Printnaam/status/voortgang van nu, via de officiële Bambu-integratie in HA.
+  async printContext() {
+    const pre = this.s.settings.printerPrefix;
+    if (!pre) return null;
+    const get = async (id) => { try { const r = await this.ha.getState(id); return r?.state; } catch { return undefined; } };
+    const [naam, status, voortgang, gepland] = await Promise.all([
+      get(`sensor.${pre}_taaknaam`), get(`sensor.${pre}_printstatus`), get(`sensor.${pre}_printvoortgang`), get(`sensor.${pre}_gewicht_van_print`)]);
+    const num = (v) => (v == null || v === 'unknown' || v === 'unavailable' || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+    return { naam: naam && !['unknown', 'unavailable'].includes(naam) ? naam : '', status: status || '', voortgang: num(voortgang), gepland: num(gepland) };
+  }
+  async updateHistory(spools) {
+    const url = this.s.settings.spoolmansyncUrl;
+    if (!url) return 0;
+    const logs = await fetchUsageLogs(url, this.fetchImpl);
+    if (!logs.some((l) => !this.s.history.seen.includes(l.id))) { this.logged && (this.logged.history = ''); return 0; }
+    const n = ingest(this.s.history, logs, { spools, context: await this.printContext() });
+    this.logged && (this.logged.history = '');
+    if (n) { this.store.log('info', `Printgeschiedenis: ${n} nieuwe afboeking(en) uit SpoolmanSync`); await this.store.save(); }
+    return n;
   }
   pause(link, reason) {
     if (!link.paused || link.pauseReason !== reason) this.store.log('warn', `Koppeling Spoolman #${link.spoolmanId} gepauzeerd: ${reason}`);
@@ -448,7 +488,7 @@ export class Bridge {
       settings: this.s.settings,
       bambu: { status: this.s.bambu.status, email: this.s.bambu.email ? this.s.bambu.email.replace(/^(.).*(@.*)$/, '$1***$2') : '' },
       links: this.s.links, pendingCreates: this.s.pendingCreates,
-      lastRound: this.lastRound, running: this.running, activity: this.s.activity.slice(0, 50),
+      history: this.s.history.prints.slice(0, 20), lastRound: this.lastRound, running: this.running, activity: this.s.activity.slice(0, 50),
     };
   }
 }
