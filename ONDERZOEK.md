@@ -77,3 +77,9 @@
 - Niet gekoppeld: Bambu-rol 6651172 (Bambu Lab PLA Matte blauw, 779/1000 g, `createType: ams`). Bambu werkt die zelf bij via de AMS; synchroniseren zou kunnen botsen.
 - Automatisch synchroniseren staat aan (60 s).
 - Nog niet gedaan: rollen aan AMS-trays koppelen in SpoolmanSync. Tray 2 (roze) en 3 (blauw) hebben geen bekende rol in Spoolman.
+
+## Dashboard "Printer & Filament" (2026-10-27)
+- Nieuw dashboard `printer-filament` met drie pagina's: **Print** (cover, status, voortgang, laag, temperaturen met grafiek, printerstatus), **Filament** (totale voorraad, lage rollen, tabel van alle rollen, verloop) en **AMS** (vochtigheid, temperatuur, drogen, sloten, rol per tray, snelkoppelingen naar Spoolman, SpoolmanSync en de bridge).
+- Het bestaande dashboard "Home" met de pagina "Printer" is niet gewijzigd.
+- Bron van de voorraad: bridge 0.3.0 publiceert `sensor.spoolman_rol_<id>`, `sensor.spoolman_voorraad` en `sensor.spoolman_bridge_status`. Sjablonen getest met de echte gegevens (10 rollen, 8950 g).
+- Niet geverifieerd: weergave in de browser (geen screenshotfunctie beschikbaar), de snelkoppelingen `/hassio/ingress/<slug>`, en de kolom "Tray" zolang er geen rollen aan trays zijn gekoppeld. De cameraweergave is weggelaten omdat de camera-entiteit `unavailable` is.
