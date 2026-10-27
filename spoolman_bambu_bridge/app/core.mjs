@@ -8,7 +8,7 @@ import { HaPublisher, buildStates, STATUS_ID } from './publish.mjs';
 import { fetchUsageLogs, ingest, historyState } from './history.mjs';
 import { quickAdd, catalog } from './quickadd.mjs';
 
-export const VERSION = '0.5.0';
+export const VERSION = '0.5.1';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -169,6 +169,10 @@ export class BambuClient {
     }
     return all;
   }
+  // Openbare profielenbibliotheek van Bambu (zelfde lijst als de keuze bij "Type" in Handy). Geen inlog nodig.
+  async filamentConfig() {
+    return request(`${this.host}/v1/design-user-service/filament/config`, { fetchImpl: this.fetchImpl, timeoutMs: 30000 });
+  }
   async createFilament(body) {
     return request(this.filamentBase, { method: 'POST', headers: this.auth, body, fetchImpl: this.fetchImpl });
   }
@@ -326,6 +330,14 @@ export class Bridge {
     const a = Buffer.from(crypto.createHash('sha256').update(String(token)).digest('hex'));
     const b = Buffer.from(h);
     return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
+  // Verkenning: structuur van Bambu's profielenbibliotheek (om de koppeling op te baseren).
+  async profileProbe() {
+    const cfg = await new BambuClient({ region: this.s.settings.region, fetchImpl: this.fetchImpl }).filamentConfig();
+    const shape = (v, d = 0) => (Array.isArray(v) ? { array: v.length, eerste: d < 3 && v.length ? shape(v[0], d + 1) : undefined }
+      : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).slice(0, 12).map(([k, x]) => [k, d < 3 ? shape(x, d + 1) : typeof x]))
+      : typeof v === 'string' ? v.slice(0, 40) : v);
+    return { bytes: JSON.stringify(cfg).length, vorm: shape(cfg) };
   }
   async spoolmanCheck() {
     try {
