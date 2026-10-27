@@ -9,7 +9,7 @@ import { fetchUsageLogs, ingest, historyState } from './history.mjs';
 import { quickAdd, catalog } from './quickadd.mjs';
 import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
 
-export const VERSION = '0.6.1';
+export const VERSION = '0.6.2';
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -174,6 +174,10 @@ export class BambuClient {
   async filamentConfig() {
     return request(`${this.host}/v1/design-user-service/filament/config`, { headers: this.token ? this.auth : {}, fetchImpl: this.fetchImpl, timeoutMs: 30000 });
   }
+  // Eigen filamentprofielen uit je Bambu-account (zoals in Studio onder "Aangepaste filamenten"). Niet-openbaar endpoint.
+  async slicerSettings() {
+    return request(`${this.host}/v1/iot-service/api/slicer/setting?version=2.0.0.0`, { headers: this.auth, fetchImpl: this.fetchImpl, timeoutMs: 30000 });
+  }
   async createFilament(body) {
     return request(this.filamentBase, { method: 'POST', headers: this.auth, body, fetchImpl: this.fetchImpl });
   }
@@ -332,6 +336,22 @@ export class Bridge {
     const a = Buffer.from(crypto.createHash('sha256').update(String(token)).digest('hex'));
     const b = Buffer.from(h);
     return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
+  // Verkenning: staan je eigen filamentprofielen (SUNLU C190 e.d.) in dit endpoint, en met welk ID?
+  async slicerProbe() {
+    const d = await this.bambu().slicerSettings();
+    const found = [];
+    const walk = (v, path, depth) => {
+      if (depth > 6 || v == null) return;
+      if (Array.isArray(v)) { v.forEach((x, i) => walk(x, `${path}[${i}]`, depth + 1)); return; }
+      if (typeof v === 'object') {
+        const name = v.name || v.filamentName || v.filament_name;
+        if (typeof name === 'string' && /sunlu/i.test(name)) found.push({ path, name, keys: Object.keys(v).slice(0, 12), id: v.setting_id ?? v.filament_id ?? v.filamentId ?? v.id ?? null });
+        for (const [k, x] of Object.entries(v)) walk(x, `${path}.${k}`, depth + 1);
+      }
+    };
+    walk(d, '$', 0);
+    return { topKeys: d && typeof d === 'object' ? Object.keys(d).slice(0, 15) : typeof d, sunlu: found.slice(0, 20) };
   }
   // Bambu's profielenbibliotheek (het "Type" in Handy), een uur in het geheugen bewaard.
   async profileList(bambu = this.bambu()) {
