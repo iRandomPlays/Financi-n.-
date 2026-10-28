@@ -1,5 +1,8 @@
 # Wijzigingen
 
+## 0.9.1
+- Dezelfde netwerkingang luistert ook op poort 8101 (container). Zet die in Home Assistant (Netwerk) op host-poort 3005, nadat SpoolmanSync naar een andere poort is verplaatst, dan openen al geprinte QR-labels met `:3005` meteen de wacht-op-rol-pagina. Poort 8100 blijft werken.
+
 ## 0.9.0
 - Koppelen aan een tray in de goede volgorde: scan het QR-label, kies de tray en doe daarna pas de rol in de printer. De bridge koppelt de rol in SpoolmanSync pas als de printer de rol 8 seconden onafgebroken in die tray ziet. Een oude rol die er nog in zat telt niet mee (de tray moet eerst leeg zijn geweest). Wachtende koppelingen verlopen na een uur, overleven een herstart en zijn te annuleren in de bridge (onderdeel "Wacht op tray").
 - Nieuwe pagina `/scan/spool/<id>` op poort 8100, zonder token (je telefoon heeft er geen). Alleen: een bestaande rol aan een bestaande tray laten koppelen of dat annuleren. Niets aanmaken of verwijderen; 240 verzoeken per minuut per apparaat.

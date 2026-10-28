@@ -124,5 +124,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT || 8099);
   createApp({ bridge, ingressOnly: process.env.INGRESS_ONLY === '1' }).listen(port, () => console.log(`Spoolman Bambu Bridge luistert op ${port}`));
   const lanPort = Number(process.env.LAN_PORT || 8100);
-  createLanApp({ bridge }).listen(lanPort, () => console.log(`Netwerkingang op ${lanPort} (pc-app met token; QR-pagina /scan/spool/<id> zonder token)`));
+  const lan = createLanApp({ bridge });
+  lan.listen(lanPort, () => console.log(`Netwerkingang op ${lanPort} (pc-app met token; QR-pagina /scan/spool/<id> zonder token)`));
+  // Tweede poort voor dezelfde ingang: in Home Assistant kun je die op host-poort 3005 zetten, zodat al geprinte QR-labels (die naar :3005 wijzen) de wacht-op-rol-pagina openen.
+  const lanPort2 = Number(process.env.LAN_PORT_2 || 8101);
+  if (lanPort2 && lanPort2 !== lanPort) createLanApp({ bridge }).listen(lanPort2, () => console.log(`Netwerkingang ook op ${lanPort2}`));
 }
