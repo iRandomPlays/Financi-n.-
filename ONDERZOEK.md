@@ -133,3 +133,10 @@
 - **Niet getest:** een verzoek van buiten de add-on-container op host-poort 3005 (de testtool verbindt met het container-IP, niet met de host-poort), en een echte print/afboeking na de poortwissel.
 - Terugdraaien: SpoolmanSync `port` weer 3005, bridge-netwerk `8101/tcp` leeg of 8101, in SpoolmanSync auto-configure opnieuw en `rest_command.reload`.
 - Gevolg: de SpoolmanSync-webinterface is nu bereikbaar via het zijpaneel (Ingress) of poort 3015, niet meer op 3005.
+
+## Gewicht bij rollen uit de rolscanner (2026-10-28)
+- Fout (gevonden door de gebruiker): de rolscanner zette het ingevulde gewicht (wat de rol nu weegt) in Spoolman-veld "Weight" (volle rol) en in het filament, met verbruik 0. Gevolg: elke rol stond op 100%, het verbruik was 0 g en Bambu kreeg dezelfde verkeerde totalen. Bij #17 stond bovendien "Spool Weight" op 1000.
+- Juiste betekenis in Spoolman: "Weight" = volle rol (1000 g), "Spool Weight" = lege spoel (hier 0 g), huidig gewicht = Weight min gebruikt. Bridge 0.9.2 schrijft dat nu zo (volle rol standaard 1000 g, instelbaar in de rolscanner; verschil als gebruikt; spoel 0 g; zwaarder dan de volle rol geeft volle rol = ingevuld gewicht).
+- Hersteld in Spoolman voor alle 20 rolscanner-rollen (#1 t/m #20, behalve #15 en #21 die al klopten): volle rol 1000 g, gebruikt = 1000 min het eerder ingevulde gewicht, spoel 0 g, ook bij de filamenten. Het resterende gewicht van elke rol is ongewijzigd (gecontroleerd voor alle 21 rollen). Aanname: het eerder ingevulde gewicht was telkens het huidige gewicht en de volle rol weegt 1000 g. Oude waarden: scratchpad `spool-gewichten-voor-herstel.json` (niet in de repo).
+- Bambu: de bridge stuurt nu ook `totalNetWeight` mee. Na een synchronisatie (14 rollen bijgewerkt, 0 fouten) staat in Bambu elke gekoppelde rol op 1000 g totaal met het juiste resterende gewicht (uit `/api/overview`, cloud). Bambu accepteert dat veld dus.
+- Niet gedaan: Bambu-rol 6651172 (PLA Matte, 660 g) is een eigen rol zonder Spoolman-koppeling en is niet aangeraakt.
