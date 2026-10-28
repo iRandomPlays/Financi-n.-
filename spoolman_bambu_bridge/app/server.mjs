@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Store, Bridge, HttpError } from './core.mjs';
 import { analyzeGcode, summarize, proposeAbort } from './usage.mjs';
+import { SCAN_PAGE } from './scanpage.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css' };
@@ -40,6 +41,7 @@ export function createApp({ bridge, ingressOnly = false, publicDir = path.join(h
         if (route === 'POST /api/links/create-bambu') return send(200, await bridge.createBambuFor(body.spoolmanId));
         if (req.method === 'DELETE' && p.startsWith('/api/links/')) { await bridge.removeLink(p.slice(11)); return send(200, { ok: true }); }
         if (route === 'POST /api/lan-token') return send(200, { token: await bridge.newLanToken() });
+        if (route === 'POST /api/pending/cancel') return send(200, (await bridge.cancelAssign(body.spoolId), bridge.status()));
         if (route === 'POST /api/sync') return send(200, await bridge.syncOnce('handmatig'));
         // Voorstel uit G-code; boekt niets af.
         if (route === 'POST /api/estimate') {
@@ -63,13 +65,38 @@ export function createApp({ bridge, ingressOnly = false, publicDir = path.join(h
   });
 }
 
-// Tweede, smalle ingang voor de pc-app: alleen rol toevoegen, alleen met token.
+// Tweede, smalle ingang op het eigen netwerk (poort 8100).
+// - Pc-app: alleen rol toevoegen, alleen met token.
+// - QR-label van een rol: de pagina /scan/spool/<id> en de bijbehorende /api/scan/<id>-aanroepen zijn zonder token bereikbaar
+//   (je telefoon heeft geen token). Ze kunnen alleen een bestaande rol aan een bestaande tray laten koppelen, niets verwijderen of aanmaken.
 export function createLanApp({ bridge }) {
   const fails = new Map();
+  const hits = new Map();
   return http.createServer(async (req, res) => {
-    const send = (code, body) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
+    const send = (code, body, type = 'application/json') => { res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' }); res.end(type === 'application/json' ? JSON.stringify(body) : body); };
+    const readJson = async (limit) => {
+      let raw = ''; for await (const c of req) { raw += c; if (raw.length > limit) throw new HttpError('Verzoek te groot', 413); }
+      try { return JSON.parse(raw || '{}'); } catch { throw new HttpError('Ongeldige JSON', 400); }
+    };
     try {
       const ip = req.socket.remoteAddress || '?';
+      const p = new URL(req.url, 'http://x').pathname;
+      const scanPage = req.method === 'GET' && /^\/scan\/spool\/\d+\/?$/.test(p);
+      const scanApi = /^\/api\/scan\/(\d+)(\/(queue|now|cancel))?$/.exec(p);
+      if (scanPage || scanApi) {
+        const h = hits.get(ip) || { n: 0, reset: 0 };
+        if (Date.now() > h.reset) { h.n = 0; h.reset = Date.now() + 60000; }
+        if (++h.n > 240) { hits.set(ip, h); return send(429, { error: 'Te veel verzoeken, wacht even' }); }
+        hits.set(ip, h);
+        if (scanPage) return send(200, SCAN_PAGE, 'text/html; charset=utf-8');
+        const id = Number(scanApi[1]); const action = scanApi[3];
+        if (!action && req.method === 'GET') return send(200, await bridge.scanInfo(id));
+        if (req.method !== 'POST' || !action) return send(405, { error: 'Methode niet toegestaan' });
+        const body = await readJson(2000);
+        if (action === 'queue') return send(200, await bridge.queueAssign(id, body.trayId));
+        if (action === 'now') return send(200, await bridge.assignNow(id, body.trayId));
+        return send(200, await bridge.cancelAssign(id));
+      }
       const f = fails.get(ip) || { n: 0, until: 0 };
       if (Date.now() < f.until) return send(429, { error: 'Te veel pogingen, wacht even' });
       const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
@@ -78,13 +105,8 @@ export function createLanApp({ bridge }) {
         return send(401, { error: 'Token ongeldig of niet ingesteld' });
       }
       fails.delete(ip);
-      const p = new URL(req.url, 'http://x').pathname;
       if (req.method === 'GET' && p === '/api/quick-add/catalog') return send(200, await bridge.quickAddCatalog());
-      if (req.method === 'POST' && p === '/api/quick-add') {
-        let raw = ''; for await (const c of req) { raw += c; if (raw.length > 20000) throw new HttpError('Verzoek te groot', 413); }
-        let body; try { body = JSON.parse(raw || '{}'); } catch { throw new HttpError('Ongeldige JSON', 400); }
-        return send(200, await bridge.quickAddSpool(body));
-      }
+      if (req.method === 'POST' && p === '/api/quick-add') return send(200, await bridge.quickAddSpool(await readJson(20000)));
       return send(404, { error: 'Onbekend endpoint' });
     } catch (e) {
       send(e.status >= 400 && e.status < 600 ? e.status : 500, { error: e.message });
@@ -98,8 +120,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   await store.load();
   const bridge = new Bridge({ store });
   bridge.schedule();
+  bridge.watchPending();
   const port = Number(process.env.PORT || 8099);
   createApp({ bridge, ingressOnly: process.env.INGRESS_ONLY === '1' }).listen(port, () => console.log(`Spoolman Bambu Bridge luistert op ${port}`));
   const lanPort = Number(process.env.LAN_PORT || 8100);
-  createLanApp({ bridge }).listen(lanPort, () => console.log(`Pc-app-ingang (token vereist) op ${lanPort}`));
+  createLanApp({ bridge }).listen(lanPort, () => console.log(`Netwerkingang op ${lanPort} (pc-app met token; QR-pagina /scan/spool/<id> zonder token)`));
 }

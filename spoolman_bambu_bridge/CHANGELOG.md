@@ -1,5 +1,11 @@
 # Wijzigingen
 
+## 0.8.0
+- Koppelen aan een tray in de goede volgorde: scan het QR-label, kies de tray en doe daarna pas de rol in de printer. De bridge koppelt de rol in SpoolmanSync pas als de printer de rol 8 seconden onafgebroken in die tray ziet. Een oude rol die er nog in zat telt niet mee (de tray moet eerst leeg zijn geweest). Wachtende koppelingen verlopen na een uur, overleven een herstart en zijn te annuleren in de bridge (onderdeel "Wacht op tray").
+- Nieuwe pagina `/scan/spool/<id>` op poort 8100, zonder token (je telefoon heeft er geen). Alleen: een bestaande rol aan een bestaande tray laten koppelen of dat annuleren. Niets aanmaken of verwijderen; 240 verzoeken per minuut per apparaat.
+- Nieuwe sensor `sensor.spoolman_tray_koppelingen` met de rollen die op een tray wachten.
+- Let op: gebruikt de SpoolmanSync-URL uit de instellingen (die moet dus ingevuld zijn) en het eigen toewijzen van SpoolmanSync.
+
 ## 0.7.0
 - Vaste rol-typen voor de rolscanner (SUNLU PLA C190, C210, C220 en PETG Basic), elk vast gekoppeld aan jouw eigen Bambu-profiel (`filament_id` uit je account). Een rol die met een type wordt toegevoegd, krijgt in Bambu precies dat profiel. Typen en locaties zijn instelbaar (`rolTypes`, `locations` in de instellingen).
 - Locatie (bijv. Vincent of Ine) wordt bij het toevoegen in Spoolman op de rol gezet (veld "Locatie") en niet naar Bambu gestuurd.

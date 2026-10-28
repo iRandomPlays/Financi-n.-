@@ -36,7 +36,10 @@ Bestaat het filament al in Spoolman (zelfde merk, materiaal, naam en kleur), dan
 - De foto wordt tijdelijk op je pc opgeslagen voor Codex en direct daarna verwijderd.
 
 ## QR-label na het opslaan
-Na "Opslaan en volgende rol" verschijnt onderaan het **QR-label van die rol** (`labelBaseUrl` uit de config, standaard `http://homeassistant.local:3005`, plus `/scan/spool/<id>`). Scannen met de gewone camera van je telefoon opent de pagina van SpoolmanSync waar je de tray kiest. Met **Label afdrukken** print je alleen het label. Het adres klopt alleen op je eigen wifi en als `homeassistant.local` op je telefoon werkt; zo niet, zet dan het vaste IP van je Home Assistant in `labelBaseUrl`.
+Na "Opslaan en volgende rol" verschijnt onderaan het **QR-label van die rol** (`labelBaseUrl` uit de config, standaard `http://homeassistant.local:8100`, plus `/scan/spool/<id>`). Dat is een pagina van de bridge (poort 8100). Met **Label afdrukken** print je alleen het label. Het adres klopt alleen op je eigen wifi en als `homeassistant.local` op je telefoon werkt; zo niet, zet dan het vaste IP van je Home Assistant in `labelBaseUrl`.
+
+**Tray koppelen zonder haast (bridge 0.8.0 of nieuwer).** Scan het label met de camera van je telefoon. Kies op de pagina de tray (bijv. Tray 1) en doe daarna de rol in de printer. De bridge kijkt elke 5 seconden of de printer de rol in die tray ziet en koppelt de rol in SpoolmanSync pas als hij 8 seconden onafgebroken zichtbaar is. Zat er al een andere rol in die tray, dan telt die niet: de bridge wacht tot de tray leeg is geweest of een andere rolchip ziet. Zit de rol er al in, dan tik je op "Rol zit er al in: nu koppelen". Na een uur zonder rol vervalt de wachtende koppeling.
+Labels die eerder met `:3005` zijn geprint, blijven werken zoals voorheen (SpoolmanSync koppelt dan meteen); print je een nieuw label, dan gebruikt dat de wacht-op-rol-pagina.
 De QR-generator zit zelf in de map (`qr.mjs`, geen bibliotheek). Het label is bij de bouw uit een echte browser-weergave uitgelezen met OpenCV.
 
 ## Direct printen naar de Niimbot D101

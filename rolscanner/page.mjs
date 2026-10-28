@@ -180,7 +180,7 @@ function initBt() {
   $('autoPrint').checked = recall('autoprint') !== 'nee'; $('autoPrint').addEventListener('change', function () { store('autoprint', $('autoPrint').checked ? 'ja' : 'nee'); });
   $('btConnect').onclick = function () { btConnect().catch(btFail); };
   $('btTest').onclick = function () {
-    var d = { id: 0, url: (INFO.labelBaseUrl || 'http://homeassistant.local:3005') + '/scan/spool/0', name: 'Testlabel', weight: 0, location: '' };
+    var d = { id: 0, url: (INFO.labelBaseUrl || 'http://homeassistant.local:8100') + '/scan/spool/0', name: 'Testlabel', weight: 0, location: '' };
     btConnect().then(function () { return btPrintLabel(d); }).catch(btFail);
   };
   $('btPrint').onclick = function () { if (!BT.last) return; btConnect().then(function () { return btPrintLabel(BT.last); }).catch(btFail); };

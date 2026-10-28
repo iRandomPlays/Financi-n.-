@@ -26,6 +26,7 @@ async function refresh() {
   $('links').innerHTML = s.links.length ? s.links.map((l) => `<div class="item"><span>Spoolman #${l.spoolmanId} ↔ Bambu ${esc(l.bambuId)}
     ${l.paused ? `<span class="warn">⏸ ${esc(l.pauseReason)}</span>` : l.lastSyncedGrams != null ? `· ${l.lastSyncedGrams} g` : ''}
     ${l.lastError ? `<span class="bad">${esc(l.lastError)}</span>` : ''}</span><button class="sec" data-unlink="${l.id}">Ontkoppel</button></div>`).join('') : '<p>Geen koppelingen.</p>';
+  $('waiting').innerHTML = (s.pendingAssigns || []).length ? s.pendingAssigns.map((p) => `<div class="item"><span>Rol #${p.spoolId} → ${esc(p.label)} <span class="warn">${esc({ 'wacht-op-rol': 'wacht op de rol', 'oude-rol-eruit': 'oude rol moet eerst eruit', 'rol-gezien': 'rol gezien, even wachten', onbekend: 'status onbekend' }[p.phase] || p.phase)}</span>${p.lastError ? ` <span class="bad">${esc(p.lastError)}</span>` : ''}</span><button class="sec" data-cancelwait="${p.spoolId}">Annuleer</button></div>`).join('') : '<p>Niets in de wacht.</p>';
   $('activity').innerHTML = s.activity.map((a) => `<li class="${a.level === 'error' ? 'bad' : a.level === 'warn' ? 'warn' : ''}">${new Date(a.at).toLocaleTimeString('nl-NL')} ${esc(a.message)}</li>`).join('');
 }
 function renderOverview() {
@@ -41,6 +42,7 @@ function renderOverview() {
 document.addEventListener('click', run(async (e) => {
   const t = e.target; if (!(t instanceof HTMLButtonElement)) return;
   if (t.dataset.unlink) { if (confirm('Ontkoppelen? De rollen zelf blijven bestaan.')) { await api('links/' + t.dataset.unlink, 'DELETE'); msg('Ontkoppeld'); } }
+  else if (t.dataset.cancelwait) { await api('pending/cancel', 'POST', { spoolId: Number(t.dataset.cancelwait) }); msg('Wachtende koppeling geannuleerd'); }
   else if (t.dataset.link) { const [a, b] = t.dataset.link.split(':'); await api('links', 'POST', { spoolmanId: a, bambuId: b }); msg('Gekoppeld'); overview = await api('overview'); }
   else if (t.dataset.create) { await api('links/create-bambu', 'POST', { spoolmanId: t.dataset.create }); msg('Bambu-rol aangemaakt en gekoppeld'); overview = await api('overview'); }
   else return;

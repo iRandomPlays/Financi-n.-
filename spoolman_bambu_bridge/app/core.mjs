@@ -8,8 +8,12 @@ import { HaPublisher, buildStates, STATUS_ID } from './publish.mjs';
 import { fetchUsageLogs, ingest, historyState } from './history.mjs';
 import { quickAdd, catalog } from './quickadd.mjs';
 import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
+import { evaluate, trayLoaded, fetchTrays, assignViaSpoolmanSync } from './trays.mjs';
 
-export const VERSION = '0.7.0';
+export const VERSION = '0.8.0';
+const PENDING_ID = 'sensor.spoolman_tray_koppelingen';
+const PHASE_TEXT = { 'wacht-op-rol': 'wacht op de rol', 'oude-rol-eruit': 'haal eerst de oude rol uit de tray', 'rol-gezien': 'rol gezien, even wachten', onbekend: 'status van de tray onbekend' };
+const trayLoadedOf = (st) => (st && st.state !== undefined ? trayLoaded(st) : null);
 export const MIN_INTERVAL = 30;
 export const MAX_INTERVAL = 3600;
 export const DEFAULT_INTERVAL = 60;
@@ -87,6 +91,8 @@ const EMPTY_STATE = () => ({
   links: [], // { id, spoolmanId, bambuId, paused, pauseReason, lastSyncedGrams, lastSyncAt, lastError, createdAt }
   pendingCreates: [], // { spoolmanId, marker, startedAt }
   history: { prints: [], seen: [] },
+  pendingAssigns: [], // { spoolId, trayId, entityId, label, createdAt, baseLoaded, baseUuid, armed, loadedSince, phase, lastError }
+  lastAssigned: null, // { spoolId, label, at }
   activity: [],
 });
 
@@ -363,6 +369,115 @@ export class Bridge {
   async quickAddCatalog() {
     return { ...(await catalog(this.spoolman())), locations: this.s.settings.locations, types: this.s.settings.rolTypes };
   }
+  // ---------- Uitgesteld koppelen aan een tray ----------
+  // Scan, kies tray, doe de rol erin: pas als de printer de rol in de tray ziet, wordt de rol in SpoolmanSync aan die tray gekoppeld.
+  syncUrl() {
+    const u = this.s.settings.spoolmansyncUrl;
+    if (!u) throw new HttpError('SpoolmanSync-URL is niet ingesteld in de bridge', 400);
+    return u;
+  }
+  async trays() {
+    const now = Date.now();
+    if (!this.trayCache || now - this.trayCache.at > 8000) this.trayCache = { at: now, list: await fetchTrays(this.syncUrl(), this.fetchImpl) };
+    return this.trayCache.list;
+  }
+  async scanInfo(spoolId) {
+    const id = Number(spoolId);
+    if (!Number.isInteger(id) || id < 1) throw new HttpError('Ongeldig rolnummer', 400);
+    const spools = await this.spoolman().listSpools();
+    const sp = spools.find((x) => x.id === id && !x.archived);
+    if (!sp) throw new HttpError(`Rol #${id} bestaat niet (meer) in Spoolman`, 404);
+    const trays = await this.trays();
+    const pending = this.s.pendingAssigns.find((p) => p.spoolId === id) || null;
+    const mine = trays.find((t) => t.assignedSpoolId === id) || null;
+    return {
+      spool: { id, name: [sp.brand, sp.name || sp.material].filter(Boolean).join(' ') || `Rol ${id}`, material: sp.material, colorHex: sp.colorHex ? `#${sp.colorHex}` : '', grams: sp.remainingWeight, location: sp.location },
+      trays: trays.map((t) => ({ id: t.id, printer: t.printer, group: t.group, label: t.label, name: t.name, color: t.color, assignedSpoolId: t.assignedSpoolId,
+        waitingSpoolId: this.s.pendingAssigns.find((p) => p.trayId === t.id)?.spoolId ?? null })),
+      assignedTrayId: mine?.id ?? null,
+      pending: pending && { trayId: pending.trayId, label: pending.label, phase: pending.phase || 'wacht-op-rol', since: pending.createdAt, error: pending.lastError || '' },
+      lastAssigned: this.s.lastAssigned && this.s.lastAssigned.spoolId === id ? this.s.lastAssigned : null,
+    };
+  }
+  async queueAssign(spoolId, trayId) {
+    const id = Number(spoolId);
+    if (!this.ha.enabled) throw new HttpError('Geen verbinding met Home Assistant; kan niet zien wanneer de rol in de tray zit', 503);
+    const [spools, trays] = await Promise.all([this.spoolman().listSpools(), this.trays()]);
+    if (!spools.some((x) => x.id === id && !x.archived)) throw new HttpError(`Rol #${id} bestaat niet (meer) in Spoolman`, 404);
+    const tray = trays.find((t) => t.id === String(trayId));
+    if (!tray) throw new HttpError('Onbekende tray', 400);
+    const st = await this.ha.getState(tray.entityId).catch(() => null);
+    if (!st) throw new HttpError(`Tray-status van ${tray.entityId} niet te lezen in Home Assistant`, 502);
+    // Eén wachtende rol per tray en één tray per rol: de laatste scan wint.
+    this.s.pendingAssigns = this.s.pendingAssigns.filter((p) => p.spoolId !== id && p.trayId !== tray.id);
+    const loaded = trayLoadedOf(st);
+    const p = { spoolId: id, trayId: tray.id, entityId: tray.entityId, label: `${tray.printer} ${tray.group} ${tray.label}`.replace(/\s+/g, ' ').trim(), createdAt: Date.now(),
+      baseLoaded: loaded !== false, baseUuid: String(st.attributes?.tray_uuid || ''), armed: false, loadedSince: 0, phase: loaded === false ? 'wacht-op-rol' : 'oude-rol-eruit', lastError: '' };
+    this.s.pendingAssigns.push(p);
+    this.store.log('info', `Rol #${id} wacht op ${p.label} (${loaded === false ? 'tray is leeg' : 'er zit nog een rol in'})`);
+    await this.store.save();
+    this.publishPending().catch(() => {});
+    return this.scanInfo(id);
+  }
+  async cancelAssign(spoolId) {
+    const id = Number(spoolId);
+    const before = this.s.pendingAssigns.length;
+    this.s.pendingAssigns = this.s.pendingAssigns.filter((p) => p.spoolId !== id);
+    if (this.s.pendingAssigns.length !== before) { this.store.log('info', `Wachtende koppeling van rol #${id} geannuleerd`); await this.store.save(); this.publishPending().catch(() => {}); }
+    return this.scanInfo(id);
+  }
+  // Koppelt meteen, zonder te wachten (rol zit er al in).
+  async assignNow(spoolId, trayId) {
+    const id = Number(spoolId);
+    const tray = (await this.trays()).find((t) => t.id === String(trayId));
+    if (!tray) throw new HttpError('Onbekende tray', 400);
+    await this.finishAssign({ spoolId: id, trayId: tray.id, label: `${tray.printer} ${tray.group} ${tray.label}`.replace(/\s+/g, ' ').trim() }, 'handmatig');
+    return this.scanInfo(id);
+  }
+  async finishAssign(p, how) {
+    await assignViaSpoolmanSync(this.syncUrl(), p.spoolId, p.trayId, this.fetchImpl);
+    this.s.pendingAssigns = this.s.pendingAssigns.filter((x) => x.spoolId !== p.spoolId && x.trayId !== p.trayId);
+    this.s.lastAssigned = { spoolId: p.spoolId, label: p.label, at: new Date().toISOString() };
+    this.trayCache = null;
+    this.store.log('info', `Rol #${p.spoolId} gekoppeld aan ${p.label} (${how})`);
+    await this.store.save();
+    this.publishPending().catch(() => {});
+  }
+  // Loopt langs de wachtende koppelingen; draait elke paar seconden.
+  async checkPending(now = Date.now()) {
+    if (this.checkingPending || !this.s.pendingAssigns.length) return;
+    this.checkingPending = true;
+    let dirty = false;
+    try {
+      for (const p of [...this.s.pendingAssigns]) {
+        let st = null;
+        try { st = await this.ha.getState(p.entityId); } catch { /* HA even weg: niets afleiden */ }
+        const r = evaluate(p, st, now);
+        if (r.phase !== p.phase) { p.phase = r.phase; dirty = true; }
+        for (const [k, v] of Object.entries(r.patch)) if (p[k] !== v) { p[k] = v; dirty = true; }
+        if (r.action === 'expire') {
+          this.s.pendingAssigns = this.s.pendingAssigns.filter((x) => x !== p);
+          this.store.log('warn', `Rol #${p.spoolId} is niet binnen een uur in ${p.label} gezien; wachtende koppeling verlopen`);
+          dirty = true;
+        } else if (r.action === 'assign') {
+          try { await this.finishAssign(p, 'rol gezien in de tray'); dirty = false; }
+          catch (e) { if (p.lastError !== e.message) { p.lastError = e.message; this.store.log('warn', `Koppelen van rol #${p.spoolId} mislukt, ik probeer opnieuw: ${e.message}`); dirty = true; } }
+        }
+      }
+      if (dirty) { await this.store.save(); this.publishPending().catch(() => {}); }
+    } finally { this.checkingPending = false; }
+  }
+  watchPending(everyMs = 5000) {
+    clearInterval(this.pendingTimer);
+    this.pendingTimer = setInterval(() => { this.checkPending().catch(() => {}); }, everyMs);
+    this.pendingTimer.unref?.();
+  }
+  async publishPending() {
+    if (!this.ha.enabled) return;
+    const items = this.s.pendingAssigns.map((p) => ({ rol: p.spoolId, tray: p.label, status: PHASE_TEXT[p.phase] || p.phase, sinds: new Date(p.createdAt).toISOString() }));
+    await this.ha.publish({ [PENDING_ID]: { state: items.length, attributes: { friendly_name: 'Rollen die op een tray wachten', icon: 'mdi:timer-sand', wachtend: items, laatst_gekoppeld: this.s.lastAssigned || null } } }, { cleanup: false });
+  }
+
   // Token voor de pc-app (poort 8100): wordt eenmalig getoond en alleen als hash bewaard.
   async newLanToken() {
     const token = crypto.randomBytes(24).toString('base64url');
@@ -551,6 +666,7 @@ export class Bridge {
       states['sensor.printgeschiedenis'] = historyState(this.s.history);
       // Verwijderde/gearchiveerde rollen worden door publish() opgeruimd; ze staan niet meer in 'states'.
       await this.ha.publish(states);
+      await this.publishPending();
       this.lastPublishError = '';
     } catch (e) {
       if (this.lastPublishError !== e.message) this.store.log('warn', `Publiceren naar Home Assistant mislukt: ${e.message}`);
@@ -598,7 +714,7 @@ export class Bridge {
       version: VERSION,
       settings: { ...this.s.settings, lanTokenHash: undefined, lanTokenSet: !!this.s.settings.lanTokenHash },
       bambu: { status: this.s.bambu.status, email: this.s.bambu.email ? this.s.bambu.email.replace(/^(.).*(@.*)$/, '$1***$2') : '' },
-      links: this.s.links, pendingCreates: this.s.pendingCreates,
+      links: this.s.links, pendingCreates: this.s.pendingCreates, pendingAssigns: this.s.pendingAssigns,
       history: this.s.history.prints.slice(0, 20), lastRound: this.lastRound, running: this.running, activity: this.s.activity.slice(0, 50),
     };
   }

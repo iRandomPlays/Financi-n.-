@@ -1,5 +1,5 @@
 name: "Spoolman Bambu Bridge"
-version: "0.7.0"
+version: "0.8.0"
 slug: spoolman_bambu_bridge
 description: "Synchroniseert resterende grammen van Spoolman naar Bambu's Filament Manager"
 url: "https://example.invalid/spoolman-bambu-bridge"
@@ -17,4 +17,4 @@ map: []
 ports:
   8100/tcp: 8100
 ports_description:
-  8100/tcp: "Pc-app voor rollen toevoegen (token vereist)"
+  8100/tcp: "Pc-app voor rollen toevoegen (token vereist) en QR-pagina voor tray koppelen"
