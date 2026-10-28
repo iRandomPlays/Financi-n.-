@@ -131,7 +131,7 @@ export function createScanner(cfg, { fetchImpl = fetch, read = readLabel } = {})
       if (req.method === 'POST' && p === '/api/save') {
         const b = await readBody(20000);
         // Alleen deze velden gaan door naar de bridge; de bridge valideert opnieuw.
-        const out = await bridge(cfg, 'POST', '/api/quick-add', { brand: b.brand, material: b.material, name: b.name, colorHex: b.colorHex, weight: b.weight, nozzle: b.nozzle, bed: b.bed, location: b.location, typeKey: b.typeKey, comment: 'Toegevoegd via rolscanner' }, fetchImpl);
+        const out = await bridge(cfg, 'POST', '/api/quick-add', { brand: b.brand, material: b.material, name: b.name, colorHex: b.colorHex, weight: b.weight, fullWeight: b.fullWeight, nozzle: b.nozzle, bed: b.bed, location: b.location, typeKey: b.typeKey, comment: 'Toegevoegd via rolscanner' }, fetchImpl);
         return send(200, out);
       }
       send(404, { error: 'Onbekend endpoint' });

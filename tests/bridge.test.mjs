@@ -24,7 +24,12 @@ async function setup({ spools, cloud = [], failCreate = null } = {}) {
     if (req.method === 'GET') return json(res, 200, { total: bambu.cloud.length, hits: bambu.cloud });
     const body = await readBody(req);
     if (req.method === 'DELETE') { bambu.deleted = (bambu.deleted || []).concat(body.ids); bambu.cloud = bambu.cloud.filter((c) => !body.ids.includes(c.id)); return json(res, 200, {}); }
-    if (req.method === 'PUT') { bambu.puts.push(body); const c = bambu.cloud.find((x) => x.id === body.id); if (c) c.netWeight = body.netWeight; return json(res, 200, {}); }
+    if (req.method === 'PUT') {
+      bambu.puts.push(body); const c = bambu.cloud.find((x) => x.id === body.id);
+      if (bambu.rejectTotal && body.totalNetWeight) return json(res, 400, { message: 'totalNetWeight niet toegestaan' });
+      if (c) { c.netWeight = body.netWeight; if (body.totalNetWeight && !bambu.ignoreTotal) c.totalNetWeight = body.totalNetWeight; }
+      return json(res, 200, {});
+    }
     if (req.method === 'POST') {
       bambu.creates++;
       const c = { id: bambu.nextId++, ...body }; bambu.cloud.push(c);
@@ -314,4 +319,27 @@ test('vast type: het vastgelegde Bambu-profiel gaat voor zoeken, ook zonder best
   await t.bridge.createBambuFor(3);
   assert.equal(t.bambu.cloud.find((x) => x.note === '[spoolman:3]').filamentId, '');
   t.close();
+});
+
+test('totaalgewicht (volle rol) gaat mee naar Bambu zodat het percentage klopt, en wordt niet elke ronde herhaald', async () => {
+  const t = await setup({ spools: [spool(1, 260)], cloud: [{ id: 7, netWeight: 260, totalNetWeight: 260, filamentName: 'PLA' }] });
+  await t.bridge.addLink(1, 7);
+  let r = await t.bridge.syncOnce();
+  assert.equal(r.updated, 1); assert.equal(t.bambu.puts.at(-1).totalNetWeight, 1000); assert.equal(t.bambu.cloud[0].totalNetWeight, 1000);
+  r = await t.bridge.syncOnce(); assert.equal(r.unchanged, 1); assert.equal(t.bambu.puts.length, 1);
+  t.close();
+});
+
+test('totaalgewicht: negeert Bambu het veld, dan wordt het maar één keer geprobeerd; weigert Bambu het, dan werkt het gewicht gewoon door', async () => {
+  const t = await setup({ spools: [spool(1, 260)], cloud: [{ id: 7, netWeight: 260, totalNetWeight: 260, filamentName: 'PLA' }] });
+  t.bambu.ignoreTotal = true; await t.bridge.addLink(1, 7);
+  await t.bridge.syncOnce(); await t.bridge.syncOnce(); await t.bridge.syncOnce();
+  assert.equal(t.bambu.puts.length, 1, 'niet elke ronde opnieuw');
+  t.close();
+  const u = await setup({ spools: [spool(1, 300)], cloud: [{ id: 7, netWeight: 500, totalNetWeight: 500, filamentName: 'PLA' }] });
+  u.bambu.rejectTotal = true; await u.bridge.addLink(1, 7);
+  const r = await u.bridge.syncOnce();
+  assert.equal(r.failed, 0); assert.equal(u.bambu.cloud[0].netWeight, 300);
+  await u.bridge.syncOnce(); assert.equal(u.bambu.puts.filter((p) => p.totalNetWeight).length, 1);
+  u.close();
 });

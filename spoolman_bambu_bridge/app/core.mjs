@@ -11,7 +11,7 @@ import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
 import { evaluate, trayLoaded, fetchTrays, assignViaSpoolmanSync } from './trays.mjs';
 import { rfidTrays, normalizeTag, addRfidSpool, assignTrays } from './rfid.mjs';
 
-export const VERSION = '0.9.0';
+export const VERSION = '0.9.2';
 export const RFID_INTERVAL = 60;
 const PENDING_ID = 'sensor.spoolman_tray_koppelingen';
 const PHASE_TEXT = { 'wacht-op-rol': 'wacht op de rol', 'oude-rol-eruit': 'haal eerst de oude rol uit de tray', 'rol-gezien': 'rol gezien, even wachten', onbekend: 'status van de tray onbekend' };
@@ -229,8 +229,9 @@ export class BambuClient {
     return request(`${this.filamentBase}/batch`, { method: 'DELETE', headers: this.auth, body: { ids: ids.map(Number) }, fetchImpl: this.fetchImpl });
   }
   // Bambu eist filamentName ook bij een gewichtsupdate; zonder wordt de naam leeggemaakt of de call geweigerd.
-  async updateWeight(id, netWeight, filamentName) {
-    return request(this.filamentBase, { method: 'PUT', headers: this.auth, body: { id: Number(id), netWeight, filamentName }, fetchImpl: this.fetchImpl });
+  // totalNetWeight (volle rol) is optioneel: Bambu toont daarmee het percentage.
+  async updateWeight(id, netWeight, filamentName, totalNetWeight = null) {
+    return request(this.filamentBase, { method: 'PUT', headers: this.auth, body: { id: Number(id), netWeight, filamentName, ...(totalNetWeight ? { totalNetWeight } : {}) }, fetchImpl: this.fetchImpl });
   }
 }
 
@@ -632,8 +633,20 @@ export class Bridge {
           if (sp.remainingWeight == null) { this.pause(link, 'Spoolman-rol heeft geen bekend gewicht'); result.paused++; continue; }
           link.paused = false; link.pauseReason = '';
           const target = Math.max(0, Math.round(sp.remainingWeight));
-          if (Number(bc.netWeight) === target) { link.lastSyncedGrams = target; link.lastError = ''; result.unchanged++; continue; }
-          await this.bambu().updateWeight(link.bambuId, target, bc.filamentName || bc.filamentType || '');
+          // Volle rol (Spoolman "Weight"): Bambu rekent het percentage uit netWeight / totalNetWeight. Eén poging per waarde:
+          // negeert Bambu het veld, dan sturen we het niet elke ronde opnieuw.
+          const wantTotal = sp.initialWeight >= 1 ? Math.max(Math.round(sp.initialWeight), target) : null;
+          const totalOk = !wantTotal || bc.totalNetWeight == null || Number(bc.totalNetWeight) === wantTotal || link.totalTried === wantTotal;
+          if (Number(bc.netWeight) === target && totalOk) { link.lastSyncedGrams = target; link.lastError = ''; result.unchanged++; continue; }
+          const name = bc.filamentName || bc.filamentType || '';
+          const sendTotal = !totalOk ? wantTotal : null;
+          try { await this.bambu().updateWeight(link.bambuId, target, name, sendTotal); }
+          catch (e) {
+            if (!sendTotal || ![400, 422].includes(e.status)) throw e;
+            link.totalTried = wantTotal; this.logOnce(`total-${link.bambuId}`, `Bambu weigert het totaalgewicht (${e.message}); alleen het resterende gewicht wordt gesynchroniseerd`);
+            await this.bambu().updateWeight(link.bambuId, target, name);
+          }
+          if (sendTotal) link.totalTried = wantTotal;
           link.lastSyncedGrams = target; link.lastSyncAt = new Date().toISOString(); link.lastError = '';
           this.store.log('info', `Spoolman #${link.spoolmanId}: ${sp.remainingWeight} g → Bambu ${target} g`);
           result.updated++;

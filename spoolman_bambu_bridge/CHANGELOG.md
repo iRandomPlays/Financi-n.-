@@ -1,5 +1,9 @@
 # Wijzigingen
 
+## 0.9.2
+- Fix gewicht bij rol toevoegen: het ingevulde gewicht is wat de rol nu weegt. In Spoolman komt de volle rol (standaard 1000 g, instelbaar) in "Weight", het verschil in "gebruikt" en de lege spoel op 0 g. Eerder kwam het huidige gewicht in "Weight" en stond het verbruik op 0, waardoor percentages niet klopten. De rolscanner heeft daarvoor een veld "Volle rol (g)".
+- Bambu krijgt ook het totaalgewicht van de rol (`totalNetWeight`) mee, zodat het percentage in Bambu klopt. Wordt het veld door Bambu genegeerd of geweigerd, dan blijft het resterende gewicht gewoon synchroniseren en wordt het totaal niet elke ronde opnieuw geprobeerd.
+
 ## 0.9.1
 - Dezelfde netwerkingang luistert ook op poort 8101 (container). Zet die in Home Assistant (Netwerk) op host-poort 3005, nadat SpoolmanSync naar een andere poort is verplaatst, dan openen al geprinte QR-labels met `:3005` meteen de wacht-op-rol-pagina. Poort 8100 blijft werken.
 

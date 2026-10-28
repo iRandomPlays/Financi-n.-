@@ -42,7 +42,8 @@ ul{padding-left:18px;margin:6px 0}
 <div class="row"><div id="fMaterial"><label for="material">Materiaal</label><input id="material" list="materials" autocomplete="off"></div>
 <div id="fName"><label for="name">Naam (product + kleur)</label><input id="name" autocomplete="off"></div></div>
 <div id="fColor"><label for="hex">Kleur</label><div class="row"><input id="color" type="color" class="swatch" value="#888888"><input id="hex" placeholder="161616" maxlength="7" autocomplete="off"></div></div>
-<div><label for="weight">Gewicht (g) <span id="wHint"></span></label><input id="weight" type="number" inputmode="decimal" min="1" max="10000"></div>
+<div><label for="weight">Gewicht nu (g) <span id="wHint"></span></label><input id="weight" type="number" inputmode="decimal" min="1" max="10000" placeholder="wat de rol nu weegt, zonder spoel"></div>
+<div><label for="full">Volle rol (g)</label><input id="full" type="number" inputmode="decimal" min="1" max="10000" value="1000"></div>
 <button id="save" disabled>Opslaan en volgende rol</button><button id="clear" class="sec">Foto weggooien</button>
 <div id="msg" role="status"></div></section>
 <section id="labelSec" hidden><h2>QR-label van de laatste rol</h2>
@@ -258,6 +259,7 @@ $('photo').addEventListener('change', async function () {
     } else { $('brand').value = j.fields.brand; $('material').value = j.fields.material; $('name').value = j.fields.name; }
     $('hex').value = j.fields.colorHex; if (j.fields.colorHex) $('color').value = '#' + j.fields.colorHex;
     $('wHint').textContent = j.fields.netWeight ? '(label: ' + j.fields.netWeight + ' g)' : '';
+    if (j.fields.netWeight >= 100 && j.fields.netWeight <= 10000) $('full').value = j.fields.netWeight;
     j.check = check; mark(j.check); $('reading').textContent = j.check.length ? 'Gelezen. Rood omrande velden zijn onzeker of leeg.' : 'Gelezen. Controleer alles en vul het gewicht in.';
     $('weight').focus(); validate();
   } catch (e) { $('reading').textContent = ''; say(e.message, 'bad'); }
@@ -267,11 +269,11 @@ $('save').onclick = async function () {
   var connectP = null;
   if (btOk() && $('autoPrint').checked) connectP = btConnect().catch(function (e) { btFail(e); return null; });
   $('save').disabled = true; say('Opslaan...');
-  var body = { brand: $('brand').value, material: $('material').value, name: $('name').value, colorHex: $('hex').value, weight: $('weight').value, nozzle: $('nozzle').value, bed: $('bed').value, location: $('loc').value, typeKey: $('type').value };
+  var body = { brand: $('brand').value, material: $('material').value, name: $('name').value, colorHex: $('hex').value, weight: $('weight').value, fullWeight: $('full').value, nozzle: $('nozzle').value, bed: $('bed').value, location: $('loc').value, typeKey: $('type').value };
   try {
     var r = await fetch('api/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     var j = await r.json(); if (!r.ok) throw new Error(j.error || 'Opslaan mislukt');
-    var li = document.createElement('li'); li.textContent = '#' + j.spoolId + ' ' + j.name + ' – ' + j.weight + ' g' + (j.location ? ' – ' + j.location : '') + (j.filamentReused ? ' (bestaand filament)' : ''); $('done').prepend(li);
+    var li = document.createElement('li'); li.textContent = '#' + j.spoolId + ' ' + j.name + ' – ' + j.weight + ' g van ' + j.fullWeight + ' g' + (j.location ? ' – ' + j.location : '') + (j.filamentReused ? ' (bestaand filament)' : ''); $('done').prepend(li);
     resetFields(); say('Opgeslagen als Spoolman #' + j.spoolId + '. Volgende rol!', 'ok'); showLabel(j); loadCatalog();
     if (connectP && BT.last) { // direct afdrukken; mislukt het, dan is de rol al opgeslagen en kan het label opnieuw
       if (await connectP) { try { await btPrintLabel(BT.last); } catch (e2) { btSay('Afdrukken mislukt: ' + e2.message + '. Tik op "Afdrukken naar Niimbot" om opnieuw te proberen.', 'bad'); } }

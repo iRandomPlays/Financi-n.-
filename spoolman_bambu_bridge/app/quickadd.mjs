@@ -11,8 +11,12 @@ export function validate(i) {
   if (!out.name) throw new QuickAddError('Naam ontbreekt');
   if (!/^[0-9A-F]{6}$/.test(out.colorHex)) throw new QuickAddError('Kleurcode moet 6 hexcijfers zijn (bijv. 161616)');
   out.location = s(i.location).slice(0, 40); // Spoolman-veld "Locatie" (bijv. Vincent of Ine); wordt niet naar Bambu gestuurd
+  // weight = wat de rol NU weegt aan filament (zonder spoel). fullWeight = de volle rol (Spoolman: "Weight"), standaard 1000 g.
   out.weight = Number(i.weight);
   if (!Number.isFinite(out.weight) || out.weight < 1 || out.weight > 10000) throw new QuickAddError('Gewicht moet tussen 1 en 10000 g liggen');
+  out.fullWeight = i.fullWeight === '' || i.fullWeight == null ? 1000 : Number(i.fullWeight);
+  if (!Number.isFinite(out.fullWeight) || out.fullWeight < 1 || out.fullWeight > 10000) throw new QuickAddError('Gewicht van de volle rol moet tussen 1 en 10000 g liggen');
+  if (out.weight > out.fullWeight) out.fullWeight = out.weight; // zwaarder dan de volle rol: dan was de rol groter dan gedacht, niets verbruikt
   for (const [k, lo, hi, label] of [['nozzle', 100, 400, 'Nozzletemperatuur'], ['bed', 0, 150, 'Bedtemperatuur']]) {
     if (i[k] === '' || i[k] == null) { out[k] = null; continue; }
     const n = Math.round(Number(i[k]));
@@ -36,12 +40,12 @@ export async function quickAdd(sm, input) {
   if (!fil) {
     fil = await sm.createFilament({
       name: v.name, vendor_id: vendor.id, material: v.material, density: DENSITY[v.material] || 1.24, diameter: 1.75,
-      weight: v.weight, color_hex: v.colorHex,
+      weight: v.fullWeight, spool_weight: 0, color_hex: v.colorHex,
       ...(v.nozzle != null && { settings_extruder_temp: v.nozzle }), ...(v.bed != null && { settings_bed_temp: v.bed }),
     });
   }
-  const spool = await sm.createSpool({ filament_id: fil.id, initial_weight: v.weight, used_weight: 0, ...(v.location && { location: v.location }), ...(v.comment && { comment: v.comment }) });
-  return { spoolId: spool.id, filamentId: fil.id, filamentReused: reused, vendorCreated: newVendor, name: `${v.brand} ${v.name}`, weight: v.weight, location: v.location };
+  const spool = await sm.createSpool({ filament_id: fil.id, initial_weight: v.fullWeight, used_weight: Math.round((v.fullWeight - v.weight) * 100) / 100, spool_weight: 0, ...(v.location && { location: v.location }), ...(v.comment && { comment: v.comment }) });
+  return { spoolId: spool.id, filamentId: fil.id, filamentReused: reused, vendorCreated: newVendor, name: `${v.brand} ${v.name}`, weight: v.weight, fullWeight: v.fullWeight, location: v.location };
 }
 
 export async function catalog(sm) {

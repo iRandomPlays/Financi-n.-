@@ -20,7 +20,7 @@ Voor gebruik met je telefoon zet je `"host": "0.0.0.0"` in de config en open je 
 1. Vul nozzle- en bedtemperatuur één keer in (of tik 190, 210 of 220). Ze blijven staan in je browser tot je ze wijzigt.
 2. Neem een foto van het label. Codex leest het label; dat duurt een paar seconden tot een halve minuut.
 3. Controleer de velden. **Rood omrand = onzeker of leeg**, daar moet je naar kijken. De kleurcode van een foto is altijd een schatting; pas hem aan met de kleurkiezer als hij niet klopt.
-4. Vul het gewicht in. Dit veld is bij elke rol weer leeg. Het gewicht van het label staat als hint ernaast.
+4. Vul bij **Gewicht nu** in wat de rol nu weegt aan filament (zonder spoel). Dit veld is bij elke rol weer leeg. **Volle rol** blijft op 1000 g staan (of het gewicht van het label als dat gelezen wordt). Spoolman krijgt de volle rol in "Weight", het verschil in "gebruikt" en de lege spoel op 0 g.
 5. **Opslaan en volgende rol.** Er gaat niets naar Spoolman voordat je daarop tikt.
 
 Bestaat het filament al in Spoolman (zelfde merk, materiaal, naam en kleur), dan wordt dat hergebruikt en komt er alleen een rol bij.

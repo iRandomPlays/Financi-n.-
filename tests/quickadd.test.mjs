@@ -58,9 +58,26 @@ test('snel toevoegen: bestaande leverancier, nieuw filament met temperaturen, he
   assert.equal(db.filaments[0].color_hex, '161616'); assert.equal(db.filaments[0].vendor_id, 1);
   assert.equal(db.spools[0].initial_weight, 1000); assert.equal(db.spools[0].used_weight, 0);
   const r2 = await b.quickAddSpool({ ...good, brand: 'SUNLU', weight: 800 }); // andere schrijfwijze, ander gewicht
-  assert.equal(r2.filamentReused, true); assert.equal(db.filaments.length, 1); assert.equal(db.spools.length, 2); assert.equal(db.spools[1].initial_weight, 800);
+  assert.equal(r2.filamentReused, true); assert.equal(db.filaments.length, 1); assert.equal(db.spools.length, 2); assert.equal(db.spools[1].initial_weight, 1000); assert.equal(db.spools[1].used_weight, 200);
   const r3 = await b.quickAddSpool({ ...good, brand: 'Nieuw Merk' });
   assert.equal(r3.vendorCreated, true); assert.equal(db.vendors.length, 2);
+  srv.close();
+});
+
+test('gewicht: het ingevulde gewicht is het huidige gewicht; volle rol (standaard 1000) komt in Weight, het verschil in verbruik, lege spoel is 0', async () => {
+  const { db, srv } = await fakeSpoolman();
+  const b = await bridgeWith(url(srv));
+  const r = await b.quickAddSpool({ ...good, weight: 260 });
+  const s = db.spools[0];
+  assert.equal(s.initial_weight, 1000); assert.equal(s.used_weight, 740); assert.equal(s.spool_weight, 0);
+  assert.equal(db.filaments[0].weight, 1000); assert.equal(db.filaments[0].spool_weight, 0);
+  assert.equal(s.initial_weight - s.used_weight, 260, 'resterend gewicht klopt met wat is ingevuld');
+  assert.equal(r.weight, 260); assert.equal(r.fullWeight, 1000);
+  await b.quickAddSpool({ ...good, weight: 450.5, fullWeight: 750 }); // een kleinere rol van 750 g
+  assert.equal(db.spools[1].initial_weight, 750); assert.equal(db.spools[1].used_weight, 299.5);
+  await b.quickAddSpool({ ...good, weight: 1030 }); // zwaarder dan de volle rol: niets verbruikt, volle rol wordt 1030
+  assert.equal(db.spools[2].initial_weight, 1030); assert.equal(db.spools[2].used_weight, 0);
+  await assert.rejects(b.quickAddSpool({ ...good, fullWeight: 0 }), /volle rol/);
   srv.close();
 });
 
