@@ -11,7 +11,7 @@ import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
 import { evaluate, trayLoaded, fetchTrays, assignViaSpoolmanSync } from './trays.mjs';
 import { rfidTrays, normalizeTag, addRfidSpool, assignTrays } from './rfid.mjs';
 
-export const VERSION = '0.9.2';
+export const VERSION = '0.10.0';
 export const RFID_INTERVAL = 60;
 const PENDING_ID = 'sensor.spoolman_tray_koppelingen';
 const PHASE_TEXT = { 'wacht-op-rol': 'wacht op de rol', 'oude-rol-eruit': 'haal eerst de oude rol uit de tray', 'rol-gezien': 'rol gezien, even wachten', onbekend: 'status van de tray onbekend' };
@@ -256,6 +256,7 @@ export function bambuCreateBody(spool, marker, profile = null) {
 }
 
 export const markerFor = (spoolmanId) => `[spoolman:${spoolmanId}]`;
+const isChip = (c) => !!normalizeTag(c?.RFID);
 
 // ---------- Synchronisatie ----------
 
@@ -599,6 +600,36 @@ export class Bridge {
     return link;
   }
 
+  // Koppelt Spoolman-rollen met een Bambu-chip (extra.tag = serienummer) aan Bambu's eigen regel (RFID = hetzelfde nummer).
+  // Een eerder door de bridge gemaakte dubbele handmatige regel ([spoolman:ID] in de notitie) wordt verwijderd; andere regels blijven staan.
+  async pairChipRolls(spools, cloud, byB, result) {
+    const chip = new Map();
+    for (const c of cloud) { const k = normalizeTag(c.RFID); if (k && !chip.has(k)) chip.set(k, c); }
+    if (!chip.size) return;
+    for (const sp of spools) {
+      const k = sp.archived ? '' : normalizeTag(sp.rfid);
+      const cb = k && chip.get(k);
+      if (!cb) continue;
+      const mine = this.s.links.find((l) => l.spoolmanId === sp.id);
+      if (mine && String(mine.bambuId) === String(cb.id)) { if (mine.lead !== 'bambu') { mine.lead = 'bambu'; await this.store.save(); } continue; }
+      if (this.s.links.some((l) => String(l.bambuId) === String(cb.id))) continue; // de chip-regel hoort al bij een andere rol
+      try {
+        if (mine) {
+          const old = byB.get(String(mine.bambuId));
+          if (old && (old.note || '').includes(markerFor(sp.id)) && !normalizeTag(old.RFID)) {
+            await this.bambu().deleteFilaments([old.id]);
+            this.store.log('info', `Dubbele Bambu-regel ${old.id} van Spoolman #${sp.id} verwijderd: Bambu heeft er zelf een (${cb.id})`);
+          }
+          this.s.links = this.s.links.filter((l) => l !== mine);
+        }
+        const link = { id: crypto.randomUUID(), spoolmanId: sp.id, bambuId: String(cb.id), lead: 'bambu', paused: false, pauseReason: '', lastSyncedGrams: null, lastSyncAt: null, lastError: '', createdAt: new Date().toISOString() };
+        this.s.links.push(link);
+        this.store.log('info', `Spoolman #${sp.id} gekoppeld aan Bambu's eigen regel ${cb.id} (serienummer); Bambu is leidend voor het gewicht`);
+        await this.store.save();
+      } catch (e) { result.failed++; this.store.log('error', `Koppelen aan Bambu's eigen regel voor Spoolman #${sp.id}: ${e.message}`); }
+    }
+  }
+
   // Eén ronde. Nooit gelijktijdig.
   async syncOnce(trigger = 'handmatig') {
     if (this.running) return { skipped: true, reason: 'ronde loopt al' };
@@ -619,13 +650,29 @@ export class Bridge {
       const byS = new Map(spools.map((s) => [s.id, s]));
       const byB = new Map(cloud.map((c) => [String(c.id), c]));
       const removed = [];
+      await this.pairChipRolls(spools, cloud, byB, result);
       for (const link of [...this.s.links]) {
         try {
           const sp = byS.get(link.spoolmanId); const bc = byB.get(String(link.bambuId));
+          // Rol met Bambu-chip: Bambu rekent het verbruik zelf uit, dus Bambu is leidend en het gewicht gaat van Bambu naar Spoolman.
+          // Bambu's eigen regel wordt nooit verwijderd.
+          if (link.lead === 'bambu') {
+            if (!sp && spools.length > 0) { removed.push(link); continue; }
+            if (!sp || sp.archived) { this.pause(link, !sp ? 'Spoolman-rol ontbreekt' : 'Spoolman-rol is gearchiveerd'); result.paused++; continue; }
+            if (!bc) { this.pause(link, 'Bambu-rol ontbreekt'); result.paused++; continue; }
+            const net = Math.round(Number(bc.netWeight));
+            if (!Number.isFinite(net) || net < 0 || sp.initialWeight == null) { this.pause(link, 'Bambu of Spoolman geeft geen bruikbaar gewicht'); result.paused++; continue; }
+            link.paused = false; link.pauseReason = '';
+            if (sp.remainingWeight != null && Math.round(sp.remainingWeight) === net) { link.lastSyncedGrams = net; link.lastError = ''; result.unchanged++; continue; }
+            await this.spoolman().patchSpool(sp.id, { used_weight: Math.round(Math.max(0, sp.initialWeight - net) * 100) / 100 });
+            link.lastSyncedGrams = net; link.lastSyncAt = new Date().toISOString(); link.lastError = '';
+            this.store.log('info', `Bambu ${link.bambuId}: ${net} g → Spoolman #${sp.id} (was ${sp.remainingWeight == null ? '?' : Math.round(sp.remainingWeight)} g)`);
+            result.updated++; continue;
+          }
           // Verwijderde Spoolman-rol: de gekoppelde Bambu-rol wordt ook verwijderd (Spoolman is leidend).
           // Bij een lege Spoolman-lijst (gewiste database?) niets verwijderen maar pauzeren.
           if (!sp && spools.length > 0) {
-            if (byB.has(String(link.bambuId))) await this.bambu().deleteFilaments([link.bambuId]);
+            if (byB.has(String(link.bambuId)) && !isChip(byB.get(String(link.bambuId)))) await this.bambu().deleteFilaments([link.bambuId]);
             removed.push(link); continue;
           }
           if (!sp || sp.archived) { this.pause(link, !sp ? 'Spoolman-rol ontbreekt' : 'Spoolman-rol is gearchiveerd'); result.paused++; continue; }
@@ -658,7 +705,8 @@ export class Bridge {
       if (this.s.settings.autoCreate && spools.length > 0) {
         // Nieuwe Spoolman-rollen automatisch in Bambu aanmaken (max. 5 per ronde); herkenning via [spoolman:ID].
         const linked = new Set(this.s.links.map((l) => l.spoolmanId));
-        const fresh = spools.filter((x) => !x.archived && !linked.has(x.id) && x.remainingWeight != null && x.remainingWeight > 0).slice(0, 5);
+        // Rollen met Bambu-chip (tag) krijgen geen handmatige Bambu-regel: Bambu heeft er zelf een, die koppelen we via het serienummer.
+        const fresh = spools.filter((x) => !x.archived && !linked.has(x.id) && !normalizeTag(x.rfid) && x.remainingWeight != null && x.remainingWeight > 0).slice(0, 5);
         for (const sp of fresh) {
           try { await this.createBambuFor(sp.id); result.created = (result.created || 0) + 1; }
           catch (e) { result.failed++; this.store.log('error', `Automatisch aanmaken Spoolman #${sp.id}: ${e.message}`); }
@@ -666,7 +714,7 @@ export class Bridge {
       }
       for (const l of removed) {
         this.s.links = this.s.links.filter((x) => x.id !== l.id);
-        this.store.log('info', `Spoolman #${l.spoolmanId} is verwijderd: Bambu-rol ${l.bambuId} verwijderd en koppeling opgeheven`);
+        this.store.log('info', `Spoolman #${l.spoolmanId} is verwijderd: ${l.lead === 'bambu' ? `koppeling met Bambu's eigen regel ${l.bambuId} opgeheven (die blijft staan)` : `Bambu-rol ${l.bambuId} verwijderd en koppeling opgeheven`}`);
         result.unlinked = (result.unlinked || 0) + 1;
       }
     } finally {

@@ -17,7 +17,7 @@ export function buildStates({ spools, links, lowStockGrams = 100, bambuStatus, l
     const grams = s.remainingWeight == null ? null : round1(s.remainingWeight);
     const initial = s.initialWeight || null;
     const pct = grams != null && initial ? Math.max(0, Math.min(100, Math.round((grams / initial) * 100))) : null;
-    const sync = !l ? 'niet gekoppeld' : l.paused ? `gepauzeerd: ${l.pauseReason}` : l.lastError ? `fout: ${l.lastError}` : 'ok';
+    const sync = !l ? 'niet gekoppeld' : l.paused ? `gepauzeerd: ${l.pauseReason}` : l.lastError ? `fout: ${l.lastError}` : l.lead === 'bambu' ? 'ok (Bambu leidend)' : 'ok';
     const low = grams != null && grams <= lowStockGrams;
     states[PREFIX + s.id] = {
       state: grams ?? 'unknown',

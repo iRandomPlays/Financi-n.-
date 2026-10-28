@@ -1,5 +1,11 @@
 # Wijzigingen
 
+## 0.10.0
+- Originele Bambu-rollen (met RFID-chip): Bambu is leidend. Bambu rekent het verbruik van zijn eigen rollen zelf uit, dus voor die rollen loopt het gewicht van Bambu's Filament Manager naar Spoolman. De bridge koppelt zo'n rol via het serienummer (Spoolman `tag` = Bambu `RFID`) aan Bambu's eigen regel en zet het resterende gewicht in Spoolman (gebruikt = volle rol min Bambu-gewicht). Er gaat niets van die rollen naar Bambu en Bambu's eigen regel wordt nooit verwijderd.
+- Een eerder door de bridge gemaakte dubbele handmatige regel (notitie `[spoolman:ID]`) van zo'n rol wordt verwijderd zodra de eigen Bambu-regel is gevonden. Voor rollen met chip maakt de bridge geen handmatige Bambu-regel meer aan.
+- Rollen zonder chip (Sunlu e.d.) blijven Spoolman-leidend (Spoolman naar Bambu), ook van het merk Bambu Lab.
+- Let op: SpoolmanSync blijft verbruik in Spoolman afboeken; bij elke sync wordt dat voor chip-rollen weer gelijkgetrokken met Bambu. Even na een print kan Spoolman daardoor kort afwijken tot Bambu zijn gewicht bijwerkt.
+
 ## 0.9.2
 - Fix gewicht bij rol toevoegen: het ingevulde gewicht is wat de rol nu weegt. In Spoolman komt de volle rol (standaard 1000 g, instelbaar) in "Weight", het verschil in "gebruikt" en de lege spoel op 0 g. Eerder kwam het huidige gewicht in "Weight" en stond het verbruik op 0, waardoor percentages niet klopten. De rolscanner heeft daarvoor een veld "Volle rol (g)".
 - Bambu krijgt ook het totaalgewicht van de rol (`totalNetWeight`) mee, zodat het percentage in Bambu klopt. Wordt het veld door Bambu genegeerd of geweigerd, dan blijft het resterende gewicht gewoon synchroniseren en wordt het totaal niet elke ronde opnieuw geprobeerd.

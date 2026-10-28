@@ -17,7 +17,15 @@ const readBody = async (req) => { let b = ''; for await (const c of req) b += c;
 async function setup({ spools, cloud = [], failCreate = null } = {}) {
   const sm = { spools: spools || [] };
   const bambu = { cloud, nextId: 100, puts: [], creates: 0, failCreate };
-  const smSrv = await listen((req, res) => req.url.startsWith('/api/v1/spool') ? json(res, 200, sm.spools) : json(res, 200, {}));
+  sm.patches = [];
+  const smSrv = await listen(async (req, res) => {
+    if (req.method === 'PATCH' && /^\/api\/v1\/spool\/\d+$/.test(req.url)) {
+      const body = await readBody(req); const s = sm.spools.find((x) => x.id === Number(req.url.split('/').pop())); sm.patches.push(body);
+      if (s && body.used_weight != null) { s.used_weight = body.used_weight; s.remaining_weight = (s.initial_weight ?? 0) - body.used_weight; }
+      return json(res, 200, s || {});
+    }
+    return req.url.startsWith('/api/v1/spool') ? json(res, 200, sm.spools) : json(res, 200, {});
+  });
   const bSrv = await listen(async (req, res) => {
     if (req.url.includes('/filament/config') && bambu.catalog) return json(res, req.headers.authorization ? 200 : 401, bambu.catalog);
     if (!req.url.includes('/my/filament/v2')) return json(res, 404, {});
@@ -342,4 +350,45 @@ test('totaalgewicht: negeert Bambu het veld, dan wordt het maar één keer gepro
   assert.equal(r.failed, 0); assert.equal(u.bambu.cloud[0].netWeight, 300);
   await u.bridge.syncOnce(); assert.equal(u.bambu.puts.filter((p) => p.totalNetWeight).length, 1);
   u.close();
+});
+
+const SERIAL = 'A4EBFC83127947D1B328A746B2641149';
+const chipSpool = (id, remaining, tag = JSON.stringify(SERIAL)) => spool(id, remaining, { extra: { tag }, initial_weight: 1000 });
+
+test('Bambu-chip: de rol wordt aan Bambu\'s eigen regel gekoppeld en het gewicht gaat van Bambu naar Spoolman', async () => {
+  const t = await setup({ spools: [chipSpool(21, 624.62)], cloud: [{ id: 6651172, createType: 'ams', RFID: SERIAL, netWeight: 660, totalNetWeight: 1000, filamentName: 'PLA Matte' }] });
+  const r = await t.bridge.syncOnce();
+  assert.equal(t.store.state.links.length, 1); assert.equal(t.store.state.links[0].bambuId, '6651172'); assert.equal(t.store.state.links[0].lead, 'bambu');
+  assert.equal(r.updated, 1); assert.deepEqual(t.sm.patches, [{ used_weight: 340 }]); assert.equal(t.sm.spools[0].remaining_weight, 660);
+  assert.equal(t.bambu.puts.length, 0, 'er gaat niets naar Bambu');
+  // Bambu telt een print af: Spoolman volgt, ook als SpoolmanSync er ondertussen iets anders van maakte
+  t.bambu.cloud[0].netWeight = 640; t.sm.spools[0].remaining_weight = 630; t.sm.spools[0].used_weight = 370;
+  await t.bridge.syncOnce(); assert.equal(t.sm.spools[0].remaining_weight, 640);
+  const again = await t.bridge.syncOnce(); assert.equal(again.unchanged, 1); assert.equal(t.bambu.puts.length, 0);
+  t.close();
+});
+
+test('Bambu-chip: een eerder gemaakte dubbele handmatige regel wordt verwijderd, Bambu\'s eigen regel nooit; geen nieuwe handmatige regel', async () => {
+  const t = await setup({ spools: [chipSpool(21, 624.62), chipSpool(22, 500, JSON.stringify('FFFF0000000000000000000000000001'))], cloud: [
+    { id: 6651172, createType: 'ams', RFID: SERIAL, netWeight: 660, filamentName: 'PLA Matte' },
+    { id: 18822004, createType: 'manual', RFID: '', note: '[spoolman:21]', netWeight: 625, filamentName: 'PLA Matte' }] });
+  await t.bridge.addLink(21, 18822004);
+  t.store.state.settings.autoCreate = true;
+  await t.bridge.syncOnce();
+  assert.deepEqual(t.bambu.deleted, [18822004]);
+  assert.deepEqual(t.store.state.links.map((l) => [l.spoolmanId, l.bambuId]), [[21, '6651172']]);
+  assert.equal(t.bambu.creates, 0, 'rol #22 heeft een chip maar nog geen Bambu-regel: wachten, niet zelf aanmaken');
+  // Spoolman-rol verwijderd: de koppeling verdwijnt, Bambu's eigen regel blijft
+  t.sm.spools = [t.sm.spools[1]];
+  await t.bridge.syncOnce();
+  assert.equal(t.store.state.links.length, 0); assert.deepEqual(t.bambu.deleted, [18822004]); assert.ok(t.bambu.cloud.some((c) => c.id === 6651172));
+  t.close();
+});
+
+test('rollen zonder chip blijven Spoolman-leidend (Spoolman naar Bambu), ook van het merk Bambu', async () => {
+  const t = await setup({ spools: [spool(1, 400)], cloud: [{ id: 7, createType: 'manual', RFID: '', netWeight: 800, filamentName: 'PLA Basic' }, { id: 8, createType: 'ams', RFID: SERIAL, netWeight: 300, filamentName: 'PLA Matte' }] });
+  await t.bridge.addLink(1, 7);
+  const r = await t.bridge.syncOnce();
+  assert.equal(r.updated, 1); assert.equal(t.bambu.puts[0].netWeight, 400); assert.equal(t.sm.patches.length, 0);
+  t.close();
 });
