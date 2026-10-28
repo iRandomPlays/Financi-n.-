@@ -357,6 +357,7 @@ const chipSpool = (id, remaining, tag = JSON.stringify(SERIAL)) => spool(id, rem
 
 test('Bambu-chip: de rol wordt aan Bambu\'s eigen regel gekoppeld en het gewicht gaat van Bambu naar Spoolman', async () => {
   const t = await setup({ spools: [chipSpool(21, 624.62)], cloud: [{ id: 6651172, createType: 'ams', RFID: SERIAL, netWeight: 660, totalNetWeight: 1000, filamentName: 'PLA Matte' }] });
+  await t.bridge.updateSettings({ chipLeader: 'bambu' });
   const r = await t.bridge.syncOnce();
   assert.equal(t.store.state.links.length, 1); assert.equal(t.store.state.links[0].bambuId, '6651172'); assert.equal(t.store.state.links[0].lead, 'bambu');
   assert.equal(r.updated, 1); assert.deepEqual(t.sm.patches, [{ used_weight: 340 }]); assert.equal(t.sm.spools[0].remaining_weight, 660);
@@ -373,6 +374,7 @@ test('Bambu-chip: een eerder gemaakte dubbele handmatige regel wordt verwijderd,
     { id: 6651172, createType: 'ams', RFID: SERIAL, netWeight: 660, filamentName: 'PLA Matte' },
     { id: 18822004, createType: 'manual', RFID: '', note: '[spoolman:21]', netWeight: 625, filamentName: 'PLA Matte' }] });
   await t.bridge.addLink(21, 18822004);
+  await t.bridge.updateSettings({ chipLeader: 'bambu' });
   t.store.state.settings.autoCreate = true;
   await t.bridge.syncOnce();
   assert.deepEqual(t.bambu.deleted, [18822004]);
@@ -390,5 +392,26 @@ test('rollen zonder chip blijven Spoolman-leidend (Spoolman naar Bambu), ook van
   await t.bridge.addLink(1, 7);
   const r = await t.bridge.syncOnce();
   assert.equal(r.updated, 1); assert.equal(t.bambu.puts[0].netWeight, 400); assert.equal(t.sm.patches.length, 0);
+  t.close();
+});
+
+test('chipLeader staat standaard op Spoolman: chip-rol wordt aan Bambu\'s eigen regel gekoppeld, Spoolman naar Bambu, dubbele regel weg, eigen regel nooit verwijderd', async () => {
+  const t = await setup({ spools: [chipSpool(21, 624.62)], cloud: [
+    { id: 6651172, createType: 'ams', RFID: SERIAL, netWeight: 660, totalNetWeight: 1000, filamentName: 'PLA Matte' },
+    { id: 18822004, createType: 'manual', RFID: '', note: '[spoolman:21]', netWeight: 625, filamentName: 'PLA Matte' }] });
+  assert.equal(t.store.state.settings.chipLeader, 'spoolman');
+  await t.bridge.addLink(21, 18822004);
+  const r = await t.bridge.syncOnce();
+  assert.deepEqual(t.bambu.deleted, [18822004]);
+  assert.equal(t.store.state.links[0].bambuId, '6651172'); assert.equal(t.store.state.links[0].lead, 'spoolman');
+  assert.equal(t.sm.patches.length, 0, 'Spoolman wordt niet aangepast'); assert.equal(r.updated, 1);
+  assert.equal(t.bambu.puts.at(-1).id, 6651172); assert.equal(t.bambu.puts.at(-1).netWeight, 625); assert.equal(t.bambu.cloud.find((c) => c.id === 6651172).netWeight, 625);
+  // Spoolman-rol verwijderd: Bambu's eigen regel blijft staan
+  t.sm.spools = [spool(2, 100)]; await t.bridge.syncOnce();
+  assert.deepEqual(t.bambu.deleted, [18822004]); assert.ok(t.bambu.cloud.some((c) => c.id === 6651172));
+  // Omschakelen naar Bambu-leidend verandert de richting van dezelfde koppeling
+  t.sm.spools = [chipSpool(21, 600)]; await t.bridge.updateSettings({ chipLeader: 'bambu' }); await t.bridge.syncOnce();
+  assert.equal(t.sm.spools[0].remaining_weight, 625);
+  await assert.rejects(t.bridge.updateSettings({ chipLeader: 'iets' }), /Leidend/);
   t.close();
 });

@@ -41,7 +41,7 @@ De bridge bewaart de typen die de rolscanner in het menu toont: label, merk, mat
 
 ## Wie is leidend?
 - **Rollen zonder chip** (Sunlu e.d.): Spoolman is leidend. Het resterende gewicht en de volle rol gaan van Spoolman naar Bambu.
-- **Originele Bambu-rollen met chip**: Bambu is leidend, omdat Bambu het verbruik zelf uitrekent. De bridge koppelt de rol via het serienummer (Spoolman `tag` = Bambu `RFID`) aan Bambu's eigen regel en zet het gewicht van Bambu in Spoolman. Er gaat niets naar Bambu en Bambu's eigen regel wordt nooit verwijderd. Een dubbele handmatige regel van de bridge zelf wordt opgeruimd.
+- **Originele Bambu-rollen met chip**: standaard is ook hier Spoolman leidend (instelling "Gewicht van originele Bambu-rollen (met chip): leidend"), omdat Bambu's gewicht een schatting is die volgens forumberichten niet altijd bijwerkt. De bridge koppelt de rol via het serienummer aan Bambu's eigen regel (geen dubbele regel) en schrijft het Spoolman-gewicht daarheen. Kies je "Bambu Filament Manager", dan is Bambu leidend: omdat Bambu het verbruik zelf uitrekent. De bridge koppelt de rol via het serienummer (Spoolman `tag` = Bambu `RFID`) aan Bambu's eigen regel en zet het gewicht van Bambu in Spoolman. Er gaat niets naar Bambu en Bambu's eigen regel wordt nooit verwijderd. Een dubbele handmatige regel van de bridge zelf wordt opgeruimd.
 - SpoolmanSync boekt verbruik nog steeds in Spoolman af (printgeschiedenis, gram per print). Voor chip-rollen trekt de volgende sync het gewicht weer gelijk met Bambu.
 
 ## Rol aan een tray koppelen (QR-label)

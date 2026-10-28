@@ -1,5 +1,8 @@
 # Wijzigingen
 
+## 0.10.1
+- Nieuwe instelling "Gewicht van originele Bambu-rollen (met chip): leidend", standaard **Spoolman**. Reden: forumberichten melden dat Bambu's gewicht voor chip-rollen niet altijd bijwerkt en een schatting is. Met Spoolman leidend gaat het gewicht ook voor chip-rollen van Spoolman naar Bambu, naar Bambu's eigen regel (gekoppeld via het serienummer, geen dubbele regel). Bambu's eigen regel wordt nooit verwijderd. "Bambu leidend" (0.10.0) blijft te kiezen.
+
 ## 0.10.0
 - Originele Bambu-rollen (met RFID-chip): Bambu is leidend. Bambu rekent het verbruik van zijn eigen rollen zelf uit, dus voor die rollen loopt het gewicht van Bambu's Filament Manager naar Spoolman. De bridge koppelt zo'n rol via het serienummer (Spoolman `tag` = Bambu `RFID`) aan Bambu's eigen regel en zet het resterende gewicht in Spoolman (gebruikt = volle rol min Bambu-gewicht). Er gaat niets van die rollen naar Bambu en Bambu's eigen regel wordt nooit verwijderd.
 - Een eerder door de bridge gemaakte dubbele handmatige regel (notitie `[spoolman:ID]`) van zo'n rol wordt verwijderd zodra de eigen Bambu-regel is gevonden. Voor rollen met chip maakt de bridge geen handmatige Bambu-regel meer aan.

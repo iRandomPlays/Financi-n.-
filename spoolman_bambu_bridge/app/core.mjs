@@ -11,7 +11,7 @@ import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
 import { evaluate, trayLoaded, fetchTrays, assignViaSpoolmanSync } from './trays.mjs';
 import { rfidTrays, normalizeTag, addRfidSpool, assignTrays } from './rfid.mjs';
 
-export const VERSION = '0.10.0';
+export const VERSION = '0.10.1';
 export const RFID_INTERVAL = 60;
 const PENDING_ID = 'sensor.spoolman_tray_koppelingen';
 const PHASE_TEXT = { 'wacht-op-rol': 'wacht op de rol', 'oude-rol-eruit': 'haal eerst de oude rol uit de tray', 'rol-gezien': 'rol gezien, even wachten', onbekend: 'status van de tray onbekend' };
@@ -86,7 +86,7 @@ function validateRolTypes(list) {
 
 const EMPTY_STATE = () => ({
   version: 1,
-  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, rfidAutoAdd: true, lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us',
+  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, rfidAutoAdd: true, chipLeader: 'spoolman', lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us',
     locations: ['Vincent', 'Ine'], rolTypes: DEFAULT_ROL_TYPES() },
   profileOverrides: {}, // spoolmanId -> Bambu-profiel dat bij het toevoegen met een vast type is gekozen
   bambu: { token: '', email: '', status: 'disconnected' },
@@ -293,6 +293,10 @@ export class Bridge {
     if (patch.autoSync !== undefined) st.autoSync = !!patch.autoSync;
     if (patch.autoCreate !== undefined) st.autoCreate = !!patch.autoCreate;
     if (patch.rfidAutoAdd !== undefined) st.rfidAutoAdd = !!patch.rfidAutoAdd;
+    if (patch.chipLeader !== undefined) {
+      if (!['spoolman', 'bambu'].includes(patch.chipLeader)) throw new HttpError('Leidend moet "spoolman" of "bambu" zijn', 400);
+      st.chipLeader = patch.chipLeader;
+    }
     if (patch.locations !== undefined) {
       const l = (Array.isArray(patch.locations) ? patch.locations : []).map((x) => String(x).trim()).filter(Boolean);
       if (!l.length || l.length > 10 || l.some((x) => x.length > 40) || new Set(l.map((x) => x.toLowerCase())).size !== l.length) throw new HttpError('Locaties: 1 tot 10 unieke namen van maximaal 40 tekens', 400);
@@ -611,7 +615,8 @@ export class Bridge {
       const cb = k && chip.get(k);
       if (!cb) continue;
       const mine = this.s.links.find((l) => l.spoolmanId === sp.id);
-      if (mine && String(mine.bambuId) === String(cb.id)) { if (mine.lead !== 'bambu') { mine.lead = 'bambu'; await this.store.save(); } continue; }
+      const lead = this.s.settings.chipLeader === 'bambu' ? 'bambu' : 'spoolman';
+      if (mine && String(mine.bambuId) === String(cb.id)) { if (mine.lead !== lead) { mine.lead = lead; await this.store.save(); } continue; }
       if (this.s.links.some((l) => String(l.bambuId) === String(cb.id))) continue; // de chip-regel hoort al bij een andere rol
       try {
         if (mine) {
@@ -622,9 +627,9 @@ export class Bridge {
           }
           this.s.links = this.s.links.filter((l) => l !== mine);
         }
-        const link = { id: crypto.randomUUID(), spoolmanId: sp.id, bambuId: String(cb.id), lead: 'bambu', paused: false, pauseReason: '', lastSyncedGrams: null, lastSyncAt: null, lastError: '', createdAt: new Date().toISOString() };
+        const link = { id: crypto.randomUUID(), spoolmanId: sp.id, bambuId: String(cb.id), lead, paused: false, pauseReason: '', lastSyncedGrams: null, lastSyncAt: null, lastError: '', createdAt: new Date().toISOString() };
         this.s.links.push(link);
-        this.store.log('info', `Spoolman #${sp.id} gekoppeld aan Bambu's eigen regel ${cb.id} (serienummer); Bambu is leidend voor het gewicht`);
+        this.store.log('info', `Spoolman #${sp.id} gekoppeld aan Bambu's eigen regel ${cb.id} (serienummer); ${lead === 'bambu' ? 'Bambu' : 'Spoolman'} is leidend voor het gewicht`);
         await this.store.save();
       } catch (e) { result.failed++; this.store.log('error', `Koppelen aan Bambu's eigen regel voor Spoolman #${sp.id}: ${e.message}`); }
     }

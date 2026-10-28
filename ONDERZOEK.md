@@ -146,3 +146,11 @@
 - Bridge 0.10.0: koppelt chip-rollen via het serienummer aan Bambu's eigen regel, zet het Bambu-gewicht in Spoolman (gebruikt = volle rol min Bambu-gewicht), verwijdert alleen de eigen dubbele regel, maakt voor chip-rollen geen handmatige regel meer aan en verwijdert Bambu's eigen regel nooit. Rollen zonder chip blijven Spoolman-leidend.
 - **Getest:** 3 nieuwe tests (koppelen en gewicht Bambu naar Spoolman, dubbele regel opruimen en eigen regel behouden bij verwijderen uit Spoolman, rollen zonder chip ongewijzigd); in Home Assistant volgt de uitkomst hieronder.
 - Aanname: Bambu's `netWeight` voor een AMS-rol is betrouwbaarder dan de schatting van SpoolmanSync (gepland gewicht x voortgang). Niet gemeten; de gebruiker beslist dit zo. Onbekend is hoe vaak en hoe nauwkeurig Bambu dat gewicht bijwerkt.
+
+## Is Bambu's Filament Manager betrouwbaar genoeg om leidend te zijn? (2026-10-28)
+- Gezocht op het web (zoekresultaten; de pagina's zelf waren niet te openen vanuit deze omgeving, dus niet dieper gelezen). Bevindingen, allemaal forumervaringen en geen officiële Bambu-mededeling:
+  - De AMS weegt niet; hij schat de resterende lengte uit de afgelegde filamentlengte en het aantal omwentelingen van de spoel (RFID-chip), en rekent dat om naar gewicht. Alleen voor originele Bambu-rollen. De startwaarde is een aanname (de AMS weet niet of de rol vol was); spoeldiameter en filamentdichtheid beïnvloeden de schatting.
+  - Een gebruiker met een X2D en AMS 2 Pro meldt dat een originele rol na meerdere prints op 1000 g bleef staan en dat gewicht maar na "sommige" prints bijwerkt; een tweede gebruiker meldt hetzelfde voor PETG. Ook zou handmatig ingevoerd gewicht dagen niet synchroniseren. Handy 3.9.0 zou "?" tonen i.p.v. het restniveau.
+  - Er is geen officiële oplossing of bevestiging van de oorzaak gevonden.
+- Conclusie: bevestigd als meldingen van gebruikers, niet als bewezen feit voor jouw printer. In jouw eigen data: Bambu stond op 660 g tegenover 625 g in Spoolman voor dezelfde rol; welk getal klopt is niet gewogen.
+- Besluit (op verzoek van de gebruiker): Spoolman is weer leidend, ook voor chip-rollen. Bridge 0.10.1: instelling `chipLeader` (standaard `spoolman`); de koppeling via het serienummer blijft, zodat er geen dubbele Bambu-regel is.
