@@ -9,8 +9,10 @@ import { fetchUsageLogs, ingest, historyState } from './history.mjs';
 import { quickAdd, catalog } from './quickadd.mjs';
 import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
 import { evaluate, trayLoaded, fetchTrays, assignViaSpoolmanSync } from './trays.mjs';
+import { rfidTrays, normalizeTag, addRfidSpool, assignTrays } from './rfid.mjs';
 
-export const VERSION = '0.8.0';
+export const VERSION = '0.9.0';
+export const RFID_INTERVAL = 60;
 const PENDING_ID = 'sensor.spoolman_tray_koppelingen';
 const PHASE_TEXT = { 'wacht-op-rol': 'wacht op de rol', 'oude-rol-eruit': 'haal eerst de oude rol uit de tray', 'rol-gezien': 'rol gezien, even wachten', onbekend: 'status van de tray onbekend' };
 const trayLoadedOf = (st) => (st && st.state !== undefined ? trayLoaded(st) : null);
@@ -84,7 +86,7 @@ function validateRolTypes(list) {
 
 const EMPTY_STATE = () => ({
   version: 1,
-  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us',
+  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, rfidAutoAdd: true, lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us',
     locations: ['Vincent', 'Ine'], rolTypes: DEFAULT_ROL_TYPES() },
   profileOverrides: {}, // spoolmanId -> Bambu-profiel dat bij het toevoegen met een vast type is gekozen
   bambu: { token: '', email: '', status: 'disconnected' },
@@ -134,6 +136,15 @@ export class SpoolmanClient {
   async createFilament(b) { return request(`${this.base}/api/v1/filament`, { method: 'POST', body: b, fetchImpl: this.fetchImpl }); }
   async createSpool(b) { return request(`${this.base}/api/v1/spool`, { method: 'POST', body: b, fetchImpl: this.fetchImpl }); }
   async ping() { await request(`${this.base}/api/v1/health`, { fetchImpl: this.fetchImpl }); }
+  async getSpool(id) { return request(`${this.base}/api/v1/spool/${id}`, { fetchImpl: this.fetchImpl }); }
+  async patchSpool(id, b) { return request(`${this.base}/api/v1/spool/${id}`, { method: 'PATCH', body: b, fetchImpl: this.fetchImpl }); }
+  // Zorgt dat een extra tekstveld voor rollen bestaat (bijv. "tag"); bestaat het al, dan verandert er niets.
+  async ensureSpoolField(key, name) {
+    const fields = await request(`${this.base}/api/v1/field/spool`, { fetchImpl: this.fetchImpl });
+    if ((fields || []).some((f) => f.key === key)) return false;
+    await request(`${this.base}/api/v1/field/spool/${key}`, { method: 'POST', body: { name, field_type: 'text' }, fetchImpl: this.fetchImpl });
+    return true;
+  }
 }
 
 function parseExtra(v) {
@@ -279,6 +290,7 @@ export class Bridge {
     }
     if (patch.autoSync !== undefined) st.autoSync = !!patch.autoSync;
     if (patch.autoCreate !== undefined) st.autoCreate = !!patch.autoCreate;
+    if (patch.rfidAutoAdd !== undefined) st.rfidAutoAdd = !!patch.rfidAutoAdd;
     if (patch.locations !== undefined) {
       const l = (Array.isArray(patch.locations) ? patch.locations : []).map((x) => String(x).trim()).filter(Boolean);
       if (!l.length || l.length > 10 || l.some((x) => x.length > 40) || new Set(l.map((x) => x.toLowerCase())).size !== l.length) throw new HttpError('Locaties: 1 tot 10 unieke namen van maximaal 40 tekens', 400);
@@ -703,7 +715,53 @@ export class Bridge {
     link.paused = true; link.pauseReason = reason;
   }
 
+  // Originele Bambu-rollen (RFID) in de AMS die nog niet in Spoolman staan, toevoegen. Eén ronde tegelijk.
+  // Een rol wordt herkend aan extra.tag; gearchiveerde rollen tellen mee, zodat een bewust gearchiveerde rol niet terugkomt.
+  async rfidRound() {
+    const set = this.s.settings;
+    if (!set.rfidAutoAdd || !set.spoolmanUrl || !this.ha.enabled || this.rfidRunning) return { skipped: true };
+    this.rfidRunning = true;
+    const result = { added: 0, known: 0, failed: 0, assigned: 0 };
+    try {
+      const trays = rfidTrays(await this.ha.listStates(), set.printerPrefix);
+      if (!trays.length) return result;
+      const sm = this.spoolman();
+      const spools = await sm.listSpools();
+      const known = new Set(spools.map((x) => normalizeTag(x.rfid)).filter(Boolean));
+      for (const t of trays) {
+        if (known.has(t.uuid)) { result.known++; continue; }
+        try {
+          const r = await addRfidSpool(sm, t);
+          known.add(t.uuid); result.added++;
+          spools.push({ id: r.spoolId, archived: false, rfid: JSON.stringify(t.uuid), tray: '' });
+          this.store.log('info', `Bambu-rol uit de AMS toegevoegd: Spoolman #${r.spoolId} ${r.name} ${r.weight} g (${t.entityId})`);
+        } catch (e) {
+          result.failed++; this.logOnce(`rfid-${t.uuid}`, `RFID-rol ${t.name} (${t.entityId}) toevoegen mislukt: ${e.message}`);
+        }
+      }
+      try {
+        for (const a of await assignTrays(sm, this.ha, trays, spools)) {
+          result.assigned++; this.store.log('info', `Spoolman #${a.spoolId} gekoppeld aan AMS-vak ${a.entityId}`);
+        }
+      } catch (e) { this.logOnce('rfid-assign', `Rol aan AMS-vak koppelen mislukt: ${e.message}`); }
+      if (result.added || result.assigned) {
+        await this.store.save();
+        if (result.added && set.autoCreate && this.s.bambu.token) this.syncOnce('nieuwe rol').catch(() => {});
+      }
+    } catch (e) {
+      this.logOnce('rfid-round', `RFID-controle mislukt: ${e.message}`);
+      result.error = e.message;
+    } finally { this.rfidRunning = false; }
+    return result;
+  }
+
   schedule() {
+    clearInterval(this.rfidTimer); clearTimeout(this.rfidFirst); this.rfidTimer = null;
+    if (this.s.settings.rfidAutoAdd && this.s.settings.spoolmanUrl && this.ha.enabled) {
+      this.rfidFirst = setTimeout(() => this.rfidRound().catch(() => {}), 5000);
+      this.rfidTimer = setInterval(() => this.rfidRound().catch(() => {}), RFID_INTERVAL * 1000);
+      this.rfidFirst.unref?.(); this.rfidTimer.unref?.();
+    }
     clearInterval(this.timer); this.timer = null;
     if (!this.s.settings.autoSync || !this.s.settings.spoolmanUrl) return;
     this.timer = setInterval(() => { if (this.s.bambu.token) this.syncOnce('automatisch').catch(() => {}); }, this.s.settings.intervalSeconds * 1000);

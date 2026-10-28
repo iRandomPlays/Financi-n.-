@@ -66,6 +66,31 @@ export class HaPublisher {
     const res = await this.fetchImpl(`${this.base}/states/${id}`, { headers: { authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(10000) });
     return res.ok ? res.json() : null;
   }
+  // Alle entiteiten met hun toestand (alleen lezen), bijv. voor de AMS-vakken.
+  async listStates() {
+    if (!this.enabled) return [];
+    const res = await this.fetchImpl(`${this.base}/states`, { headers: { authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`HA ${res.status}`);
+    return res.json();
+  }
+  // entity_id -> unique_id van de Bambu-sensoren, uit het entiteitenregister (alleen via websocket beschikbaar).
+  async trayUniqueIds() {
+    const url = this.wsUrl || this.base.replace(/^http/, 'ws').replace(/\/api$/, '/websocket');
+    const list = await new Promise((resolve, reject) => {
+      const ws = new WebSocket(url);
+      const timer = setTimeout(() => end(reject, new Error('websocket time-out')), 15000);
+      const end = (fn, v) => { clearTimeout(timer); try { ws.close(); } catch { /* al dicht */ } fn(v); };
+      ws.onerror = () => end(reject, new Error('websocket fout'));
+      ws.onmessage = (ev) => {
+        const m = JSON.parse(ev.data);
+        if (m.type === 'auth_required') ws.send(JSON.stringify({ type: 'auth', access_token: this.token }));
+        else if (m.type === 'auth_ok') ws.send(JSON.stringify({ id: 1, type: 'config/entity_registry/list' }));
+        else if (m.type === 'auth_invalid') end(reject, new Error('websocket: geen toegang'));
+        else if (m.type === 'result' && m.id === 1) (m.success ? end(resolve, m.result) : end(reject, new Error('entiteitenregister niet te lezen')));
+      };
+    });
+    return new Map((list || []).filter((e) => e.platform === 'bambu_lab' && e.unique_id).map((e) => [e.entity_id, e.unique_id]));
+  }
   // Zet alle sensoren en ruimt sensoren op van rollen die niet meer bestaan.
   async publish(states, { cleanup = true } = {}) {
     if (!this.enabled) return { skipped: true };
