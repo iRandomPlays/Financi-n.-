@@ -46,7 +46,7 @@ if ($oldCfg) {
   $cfg = [ordered]@{
     bridgeUrl    = $bridge.TrimEnd('/')
     token        = $token.Trim()
-    labelBaseUrl = 'http://homeassistant.local:8100'
+    labelBaseUrl = 'http://homeassistant.local:3005'
     host         = '0.0.0.0'
     port         = 8787
     codexBin     = 'codex'

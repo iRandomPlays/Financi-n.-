@@ -145,7 +145,7 @@ export async function loadConfig(file = path.join(here, 'rolscanner.config.json'
   try { cfg = JSON.parse((await fs.readFile(file, 'utf8')).replace(/^\uFEFF/, '')); } catch (e) { if (e.code !== 'ENOENT') throw new Error(`Config onleesbaar: ${e.message}`); }
   return {
     port: 8787, host: '127.0.0.1', codexBin: 'codex', codexArgs: [], timeoutSec: 120,
-    labelBaseUrl: 'http://homeassistant.local:8100', // waar de QR-code van een rol naartoe wijst (de bridge, poort 8100: eerst tray kiezen, koppelen zodra de rol erin zit)
+    labelBaseUrl: 'http://homeassistant.local:3005', // waar de QR-code van een rol naartoe wijst: de bridge-pagina op host-poort 3005 (eerst tray kiezen, koppelen zodra de rol erin zit)
     ...cfg,
     bridgeUrl: process.env.ROLSCANNER_BRIDGE_URL || cfg.bridgeUrl || '', token: process.env.ROLSCANNER_TOKEN || cfg.token || '',
   };

@@ -1,5 +1,5 @@
 {
-  "bridgeUrl": "http://homeassistant.local:8100",
+  "bridgeUrl": "http://homeassistant.local:3005",
   "token": "PLAK-HIER-HET-TOKEN-UIT-DE-BRIDGE",
   "labelBaseUrl": "http://homeassistant.local:8100",
   "port": 8787,
