@@ -154,3 +154,10 @@
   - Er is geen officiële oplossing of bevestiging van de oorzaak gevonden.
 - Conclusie: bevestigd als meldingen van gebruikers, niet als bewezen feit voor jouw printer. In jouw eigen data: Bambu stond op 660 g tegenover 625 g in Spoolman voor dezelfde rol; welk getal klopt is niet gewogen.
 - Besluit (op verzoek van de gebruiker): Spoolman is weer leidend, ook voor chip-rollen. Bridge 0.10.1: instelling `chipLeader` (standaard `spoolman`); de koppeling via het serienummer blijft, zodat er geen dubbele Bambu-regel is.
+
+## Printer toont "?" na koppelen (2026-10-29)
+- Klacht: na het koppelen van een rol zonder chip aan een vak blijft de printer dat vak als "?" tonen.
+- Oorzaak: SpoolmanSync en Spoolman schrijven niets naar de printer; de AMS kent alleen wat via de chip of handmatig op de printer/in Studio is ingesteld.
+- Geprobeerd: de bridge laat `bambu_lab.set_filament` (Home Assistant-integratie) het vak instellen. Live op de X2D van de gebruiker: de service meldt "gelukt" maar het vak blijft "?"; de Home Assistant-log meldt `Printer firmware requires mqtt encryption. All control actions are blocked.` en `Service call timed out`. "Ontwikkelaar LAN-modus" staat uit. Volgens Bambu's wiki (zoekresultaat, niet zelf geopend) schakelt Developer-modus de autorisatie uit maar sluit het de Bambu Cloud uit; daarom niet aangezet.
+- Gevolg: bridge 0.11.1 heeft de functie uit staan (code en tests blijven, werken met printers die besturing toestaan) en de scanpagina toont wat je zelf in de printer moet kiezen.
+- Niet getest: of `set_filament` werkt met Developer-modus aan; het bepalen van de juiste temperatuurbereiken (nozzle ± 20 °C is een aanname, geen Bambu-waarde).

@@ -11,7 +11,7 @@ import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
 import { evaluate, trayLoaded, fetchTrays, assignViaSpoolmanSync } from './trays.mjs';
 import { rfidTrays, normalizeTag, addRfidSpool, assignTrays } from './rfid.mjs';
 
-export const VERSION = '0.11.0';
+export const VERSION = '0.11.1';
 export const RFID_INTERVAL = 60;
 const PENDING_ID = 'sensor.spoolman_tray_koppelingen';
 const TRAY_TEMPS = { PLA: [190, 230], PETG: [220, 260], ABS: [240, 270], ASA: [240, 270], TPU: [200, 230] }; // alleen als Spoolman geen nozzletemperatuur heeft; aanname, geen Bambu-waarden
@@ -87,7 +87,7 @@ function validateRolTypes(list) {
 
 const EMPTY_STATE = () => ({
   version: 1,
-  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, rfidAutoAdd: true, chipLeader: 'spoolman', setTrayFilament: true, lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us',
+  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, rfidAutoAdd: true, chipLeader: 'spoolman', setTrayFilament: false, lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us',
     locations: ['Vincent', 'Ine'], rolTypes: DEFAULT_ROL_TYPES() },
   profileOverrides: {}, // spoolmanId -> Bambu-profiel dat bij het toevoegen met een vast type is gekozen
   bambu: { token: '', email: '', status: 'disconnected' },
@@ -411,7 +411,17 @@ export class Bridge {
     const trays = await this.trays();
     const pending = this.s.pendingAssigns.find((p) => p.spoolId === id) || null;
     const mine = trays.find((t) => t.assignedSpoolId === id) || null;
+    // Staat het vak in de printer nog op "?" (rol zonder chip), dan moet je daar zelf het filament kiezen: zeg wat.
+    let hint = null;
+    if (mine && this.ha.enabled) {
+      const st = await this.ha.getState(mine.entityId).catch(() => null);
+      if (st && st.attributes?.unknown === true) {
+        const prof = this.s.profileOverrides[id];
+        hint = { tray: `${mine.group} ${mine.label}`, profile: prof ? `${prof.vendor} ${prof.name}` : '', type: sp.material, colorHex: sp.colorHex ? `#${sp.colorHex}` : '', nozzle: sp.nozzleTemp };
+      }
+    }
     return {
+      hint,
       spool: { id, name: [sp.brand, sp.name || sp.material].filter(Boolean).join(' ') || `Rol ${id}`, material: sp.material, colorHex: sp.colorHex ? `#${sp.colorHex}` : '', grams: sp.remainingWeight, location: sp.location },
       trays: trays.map((t) => ({ id: t.id, printer: t.printer, group: t.group, label: t.label, name: t.name, color: t.color, assignedSpoolId: t.assignedSpoolId,
         waitingSpoolId: this.s.pendingAssigns.find((p) => p.trayId === t.id)?.spoolId ?? null })),
@@ -476,7 +486,7 @@ export class Bridge {
       const clamp = (n) => Math.min(300, Math.max(160, Math.round(n)));
       await this.ha.callService('bambu_lab', 'set_filament', { entity_id: entityId, tray_info_idx: profile.id, tray_color: `${spool.colorHex}FF`, tray_type: material, nozzle_temp_min: clamp(range[0]), nozzle_temp_max: clamp(range[1]) });
       this.store.log('info', `Vak ${entityId} in de printer ingesteld: ${profile.name} (${profile.id}), ${material}, #${spool.colorHex}, ${clamp(range[0])}-${clamp(range[1])} °C`);
-    } catch (e) { this.store.log('warn', `Filament in het vak instellen mislukt: ${e.message}`); }
+    } catch (e) { this.store.log('warn', `Filament in het vak instellen mislukt: ${e.message}. Met de firmware van sommige printers kan Home Assistant dat alleen met Developer-modus; zet de instelling anders uit`); }
   }
   async finishAssign(p, how) {
     await assignViaSpoolmanSync(this.syncUrl(), p.spoolId, p.trayId, this.fetchImpl);

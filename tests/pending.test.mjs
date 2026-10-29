@@ -227,6 +227,7 @@ test('scanpagina: geen innerHTML met servergegevens en geen niet-ge-escapete ${.
 
 const PROFILE = { vendor: 'SUNLU', type: 'PLA', name: 'PLA C220', id: 'P9877e1f' };
 async function loadAndAssign(t, { tray: trayState = tray(false) } = {}) {
+  t.store.state.settings.setTrayFilament = true;
   await t.bridge.queueAssign(5, 'uid-tray-1');
   t.world.ha[TRAY] = trayState;
   const t0 = Date.now();
@@ -252,8 +253,9 @@ test('vak niet instellen: chip-rol, instelling uit, printer bezig, of geen beken
   let t = await setup(); t.store.state.profileOverrides[5] = PROFILE;
   await loadAndAssign(t, { tray: tray(false, { tray_uuid: 'A4EBFC83127947D1B328A746B2641149' }) });
   assert.equal(t.world.assigns.length, 1); assert.equal(t.world.services.length, 0, 'chip-rol: printer kent hem zelf'); t.close();
-  t = await setup(); t.store.state.profileOverrides[5] = PROFILE; t.store.state.settings.setTrayFilament = false;
-  await loadAndAssign(t); assert.equal(t.world.services.length, 0, 'instelling uit'); t.close();
+  t = await setup(); t.store.state.profileOverrides[5] = PROFILE; t.world.noop = true;
+  await t.bridge.queueAssign(5, 'uid-tray-1'); t.world.ha[TRAY] = tray(false); await t.bridge.checkPending(Date.now()); await t.bridge.checkPending(Date.now() + STABLE_MS + 1);
+  assert.equal(t.world.assigns.length, 1); assert.equal(t.world.services.length, 0, 'instelling standaard uit'); assert.equal(t.store.state.settings.setTrayFilament, false); t.close();
   t = await setup(); t.store.state.profileOverrides[5] = PROFILE; t.store.state.settings.printerPrefix = 'x2d'; t.world.ha['sensor.x2d_printstatus'] = { state: 'running', attributes: {} };
   await loadAndAssign(t); assert.equal(t.world.assigns.length, 1); assert.equal(t.world.services.length, 0, 'printer bezig'); t.close();
   t = await setup();
@@ -266,5 +268,18 @@ test('mislukte service-aanroep blokkeert de koppeling niet', async () => {
   await loadAndAssign(t);
   assert.equal(t.world.assigns.length, 1); assert.equal(t.store.state.pendingAssigns.length, 0);
   assert.ok(t.store.state.activity.some((a) => /instellen mislukt: HA 400/.test(a.message)));
+  t.close();
+});
+
+test('scanpagina: staat het vak in de printer nog op "?", dan staat er wat je daar moet kiezen', async () => {
+  const t = await setup(); t.store.state.profileOverrides[5] = PROFILE; t.world.spools[0].filament.settings_extruder_temp = 220;
+  t.world.spools[0].extra = { active_tray: JSON.stringify('uid-tray-1') };
+  t.world.ha[TRAY] = { state: '?', attributes: { empty: false, unknown: true, tray_uuid: '' } };
+  // SpoolmanSync meldt de koppeling aan dit vak
+  const orig = t.bridge.trays.bind(t.bridge); t.bridge.trays = async () => (await orig()).map((x) => ({ ...x, assignedSpoolId: 5 }));
+  const info = await t.bridge.scanInfo(5);
+  assert.deepEqual(info.hint, { tray: 'AMS 1 Tray 1', profile: 'SUNLU PLA C220', type: 'PLA', colorHex: '#000000', nozzle: 220 });
+  t.world.ha[TRAY] = { state: 'Sunlu PLA', attributes: { empty: false, unknown: false, tray_uuid: '' } };
+  assert.equal((await t.bridge.scanInfo(5)).hint, null);
   t.close();
 });

@@ -62,7 +62,12 @@ function render(d) {
     var no = el('button', 'link', 'Annuleren'); no.onclick = function () { act('/cancel', {}); }; row.appendChild(no);
     c.appendChild(row); st.appendChild(c);
   } else if (cur) {
-    var ok = el('div', 'card status ok'); ok.appendChild(el('b', '', 'Gekoppeld aan ' + cur.printer + ' ' + cur.group + ' ' + cur.label)); st.appendChild(ok);
+    var ok = el('div', 'card status ok'); ok.appendChild(el('b', '', 'Gekoppeld aan ' + cur.printer + ' ' + cur.group + ' ' + cur.label));
+    if (d.hint) {
+      var h = d.hint; var line = [h.profile || h.type, h.colorHex ? 'kleur ' + h.colorHex : '', h.nozzle ? h.nozzle + ' \u00b0C' : ''].filter(Boolean).join(', ');
+      ok.appendChild(el('div', 'muted', 'De printer toont dit vak nog als "?". Kies in de printer bij ' + h.tray + ': ' + line + '.'));
+    }
+    st.appendChild(ok);
   }
   var list = $('trays'); list.textContent = '';
   var lastGroup = null;

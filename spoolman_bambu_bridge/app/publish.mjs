@@ -65,7 +65,7 @@ export class HaPublisher {
   async callService(domain, service, data) {
     if (!this.enabled) throw new Error('Geen Home Assistant-verbinding');
     const res = await this.fetchImpl(`${this.base}/services/${domain}/${service}`, {
-      method: 'POST', headers: { authorization: `Bearer ${this.token}`, 'content-type': 'application/json' }, body: JSON.stringify(data), signal: AbortSignal.timeout(15000),
+      method: 'POST', headers: { authorization: `Bearer ${this.token}`, 'content-type': 'application/json' }, body: JSON.stringify(data), signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) throw new Error(`HA ${res.status}${res.status === 400 ? ' (ongeldige gegevens voor de service)' : ''}`);
   }

@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 0.11.1
+- Instelling "Na koppelen aan een tray het filament in de printer instellen" staat nu standaard **uit**. Op de X2D van de gebruiker weigert de printer besturing vanuit Home Assistant (`Printer firmware requires mqtt encryption. All control actions are blocked.`); `bambu_lab.set_filament` meldt dan geen fout maar doet niets. Met Developer-modus zou het kunnen, maar die modus sluit volgens Bambu de verbinding met de Bambu Cloud uit.
+- De scanpagina zegt nu wat je in de printer moet kiezen als het gekoppelde vak daar nog "?" toont (profiel, kleur, temperatuur).
+- Time-out van de service-aanroep 8 s (was 15 s).
+
 ## 0.11.0
 - Na het koppelen van een rol aan een tray zet de bridge het filament ook in het vak van de printer (service `bambu_lab.set_filament` van de Home Assistant-integratie): Bambu-profiel (bijv. SUNLU PLA C210), type, kleur en een temperatuurbereik (nozzletemperatuur uit Spoolman ± 20 °C, anders een vast bereik per materiaal). Daardoor toont de printer geen "?" meer bij rollen zonder chip. Alleen als het vak geen chip-rol bevat, de printer niet print en er een Bambu-profiel bekend is; er wordt niets verzonnen. Instelling "Na koppelen aan een tray het filament in de printer instellen" (standaard aan).
 
