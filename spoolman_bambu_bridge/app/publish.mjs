@@ -61,6 +61,14 @@ export class HaPublisher {
     });
     if (!res.ok && !(method === 'DELETE' && res.status === 404)) throw new Error(`HA ${res.status}`);
   }
+  // Roept een Home Assistant-service aan (bijv. bambu_lab.set_filament).
+  async callService(domain, service, data) {
+    if (!this.enabled) throw new Error('Geen Home Assistant-verbinding');
+    const res = await this.fetchImpl(`${this.base}/services/${domain}/${service}`, {
+      method: 'POST', headers: { authorization: `Bearer ${this.token}`, 'content-type': 'application/json' }, body: JSON.stringify(data), signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`HA ${res.status}${res.status === 400 ? ' (ongeldige gegevens voor de service)' : ''}`);
+  }
   async getState(id) {
     if (!this.enabled) return null;
     const res = await this.fetchImpl(`${this.base}/states/${id}`, { headers: { authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(10000) });

@@ -11,9 +11,10 @@ import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
 import { evaluate, trayLoaded, fetchTrays, assignViaSpoolmanSync } from './trays.mjs';
 import { rfidTrays, normalizeTag, addRfidSpool, assignTrays } from './rfid.mjs';
 
-export const VERSION = '0.10.1';
+export const VERSION = '0.11.0';
 export const RFID_INTERVAL = 60;
 const PENDING_ID = 'sensor.spoolman_tray_koppelingen';
+const TRAY_TEMPS = { PLA: [190, 230], PETG: [220, 260], ABS: [240, 270], ASA: [240, 270], TPU: [200, 230] }; // alleen als Spoolman geen nozzletemperatuur heeft; aanname, geen Bambu-waarden
 const PHASE_TEXT = { 'wacht-op-rol': 'wacht op de rol', 'oude-rol-eruit': 'haal eerst de oude rol uit de tray', 'rol-gezien': 'rol gezien, even wachten', onbekend: 'status van de tray onbekend' };
 const trayLoadedOf = (st) => (st && st.state !== undefined ? trayLoaded(st) : null);
 export const MIN_INTERVAL = 30;
@@ -86,7 +87,7 @@ function validateRolTypes(list) {
 
 const EMPTY_STATE = () => ({
   version: 1,
-  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, rfidAutoAdd: true, chipLeader: 'spoolman', lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us',
+  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, rfidAutoAdd: true, chipLeader: 'spoolman', setTrayFilament: true, lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us',
     locations: ['Vincent', 'Ine'], rolTypes: DEFAULT_ROL_TYPES() },
   profileOverrides: {}, // spoolmanId -> Bambu-profiel dat bij het toevoegen met een vast type is gekozen
   bambu: { token: '', email: '', status: 'disconnected' },
@@ -165,6 +166,7 @@ export function normalizeSpoolmanSpool(s) {
     initialWeight: s.initial_weight ?? f.weight ?? null,
     remainingWeight: remaining,
     location: s.location || '',
+    nozzleTemp: f.settings_extruder_temp ?? null,
     rfid: s.extra?.rfid || s.extra?.tag || '',
     tray: parseExtra(s.extra?.active_tray), // door SpoolmanSync gevuld (JSON-tekst in Spoolman)
   };
@@ -293,6 +295,7 @@ export class Bridge {
     if (patch.autoSync !== undefined) st.autoSync = !!patch.autoSync;
     if (patch.autoCreate !== undefined) st.autoCreate = !!patch.autoCreate;
     if (patch.rfidAutoAdd !== undefined) st.rfidAutoAdd = !!patch.rfidAutoAdd;
+    if (patch.setTrayFilament !== undefined) st.setTrayFilament = !!patch.setTrayFilament;
     if (patch.chipLeader !== undefined) {
       if (!['spoolman', 'bambu'].includes(patch.chipLeader)) throw new HttpError('Leidend moet "spoolman" of "bambu" zijn', 400);
       st.chipLeader = patch.chipLeader;
@@ -452,8 +455,33 @@ export class Bridge {
     await this.finishAssign({ spoolId: id, trayId: tray.id, label: `${tray.printer} ${tray.group} ${tray.label}`.replace(/\s+/g, ' ').trim() }, 'handmatig');
     return this.scanInfo(id);
   }
+  // Zet type, kleur, temperatuur en Bambu-profiel van de rol op het vak in de printer (bambu_lab.set_filament), zodat de printer geen "?" meer toont.
+  // Alleen voor rollen zonder chip (een chip-rol kent de printer zelf), niet tijdens een print, en alleen met een bekend Bambu-profiel: er wordt niets verzonnen.
+  async setTrayFilament(spoolId, entityId) {
+    if (!this.s.settings.setTrayFilament || !this.ha.enabled || !entityId) return;
+    try {
+      const st = await this.ha.getState(entityId);
+      if (!st) return this.store.log('warn', `Vak ${entityId} niet gevonden in Home Assistant; filament niet ingesteld`);
+      if (normalizeTag(String(st.attributes?.tray_uuid || ''))) return; // chip-rol: de printer kent hem zelf
+      const ctx = await this.printContext().catch(() => null);
+      if (ctx && /running|pause|prepare/i.test(ctx.status)) return this.store.log('info', `Printer is bezig; filament van vak ${entityId} niet ingesteld`);
+      const spool = (await this.spoolman().listSpools()).find((x) => x.id === spoolId);
+      if (!spool) return;
+      let profile = this.s.profileOverrides[spoolId] || null;
+      if (!profile && this.s.bambu.token) profile = await this.findProfile(this.bambu(), spool, await this.bambu().listFilaments().catch(() => []));
+      if (!profile?.id) return this.store.log('warn', `Geen Bambu-profiel bekend voor Spoolman #${spoolId}; het vak in de printer is niet ingesteld`);
+      const material = String(profile.type || spool.material || '').toUpperCase();
+      const range = spool.nozzleTemp ? [spool.nozzleTemp - 20, spool.nozzleTemp + 20] : TRAY_TEMPS[material];
+      if (!range || !/^[0-9A-F]{6}$/.test(spool.colorHex)) return this.store.log('warn', `Spoolman #${spoolId}: temperatuur of kleur onbekend; het vak in de printer is niet ingesteld`);
+      const clamp = (n) => Math.min(300, Math.max(160, Math.round(n)));
+      await this.ha.callService('bambu_lab', 'set_filament', { entity_id: entityId, tray_info_idx: profile.id, tray_color: `${spool.colorHex}FF`, tray_type: material, nozzle_temp_min: clamp(range[0]), nozzle_temp_max: clamp(range[1]) });
+      this.store.log('info', `Vak ${entityId} in de printer ingesteld: ${profile.name} (${profile.id}), ${material}, #${spool.colorHex}, ${clamp(range[0])}-${clamp(range[1])} °C`);
+    } catch (e) { this.store.log('warn', `Filament in het vak instellen mislukt: ${e.message}`); }
+  }
   async finishAssign(p, how) {
     await assignViaSpoolmanSync(this.syncUrl(), p.spoolId, p.trayId, this.fetchImpl);
+    const entityId = p.entityId || (await this.trays().catch(() => [])).find((t) => t.id === p.trayId)?.entityId;
+    await this.setTrayFilament(p.spoolId, entityId); // vangt zelf alle fouten af
     this.s.pendingAssigns = this.s.pendingAssigns.filter((x) => x.spoolId !== p.spoolId && x.trayId !== p.trayId);
     this.s.lastAssigned = { spoolId: p.spoolId, label: p.label, at: new Date().toISOString() };
     this.trayCache = null;

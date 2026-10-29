@@ -85,7 +85,7 @@ test('flattenTrays: gebruikt unique_id, slaat virtuele printers over, benoemt ex
 // ---------- bridge met nagebootste Spoolman, SpoolmanSync en Home Assistant ----------
 
 async function setup() {
-  const world = { ha: { [TRAY]: tray(true) }, assigns: [], assignFail: 0, published: {},
+  const world = { ha: { [TRAY]: tray(true) }, assigns: [], assignFail: 0, published: {}, services: [],
     spools: [{ id: 5, remaining_weight: 900, initial_weight: 1000, archived: false, location: 'Vincent', filament: { name: 'PLA C220 Zwart', material: 'PLA', color_hex: '000000', vendor: { name: 'SUNLU' } } },
              { id: 6, remaining_weight: 100, initial_weight: 1000, archived: true, filament: { name: 'Oud', material: 'PLA', vendor: { name: 'X' } } },
              { id: 7, remaining_weight: 800, initial_weight: 1000, archived: false, filament: { name: 'Wit', material: 'PLA', color_hex: 'FFFFFF', vendor: { name: 'SUNLU' } } }] };
@@ -99,6 +99,7 @@ async function setup() {
     json(res, 404, {});
   });
   const ha = await listen(async (req, res) => {
+    if (req.url.startsWith('/services/')) { world.services.push([req.url, await readBody(req)]); return json(res, 200, []); }
     const id = req.url.replace('/states/', '');
     if (req.method === 'GET') return world.ha[id] ? json(res, 200, world.ha[id]) : json(res, 404, {});
     world.published[id] = await readBody(req); json(res, 200, {});
@@ -222,4 +223,48 @@ test('QR-pagina en scan-API zonder token; al het andere blijft achter het token'
 test('scanpagina: geen innerHTML met servergegevens en geen niet-ge-escapete ${...}', () => {
   assert.ok(!/innerHTML/.test(SCAN_PAGE));
   assert.ok(SCAN_PAGE.includes('/api/scan/'));
+});
+
+const PROFILE = { vendor: 'SUNLU', type: 'PLA', name: 'PLA C220', id: 'P9877e1f' };
+async function loadAndAssign(t, { tray: trayState = tray(false) } = {}) {
+  await t.bridge.queueAssign(5, 'uid-tray-1');
+  t.world.ha[TRAY] = trayState;
+  const t0 = Date.now();
+  await t.bridge.checkPending(t0); await t.bridge.checkPending(t0 + STABLE_MS + 1);
+}
+
+test('na het koppelen wordt het filament in het vak van de printer ingesteld (type, kleur, temperatuur, Bambu-profiel)', async () => {
+  const t = await setup(); t.store.state.profileOverrides[5] = PROFILE;
+  await loadAndAssign(t);
+  assert.equal(t.world.assigns.length, 1);
+  assert.deepEqual(t.world.services, [['/services/bambu_lab/set_filament', { entity_id: TRAY, tray_info_idx: 'P9877e1f', tray_color: '000000FF', tray_type: 'PLA', nozzle_temp_min: 190, nozzle_temp_max: 230 }]]);
+  t.close();
+});
+
+test('nozzletemperatuur uit Spoolman bepaalt het bereik (+/- 20 graden)', async () => {
+  const t = await setup(); t.store.state.profileOverrides[5] = PROFILE; t.world.spools[0].filament.settings_extruder_temp = 220;
+  await loadAndAssign(t);
+  assert.equal(t.world.services[0][1].nozzle_temp_min, 200); assert.equal(t.world.services[0][1].nozzle_temp_max, 240);
+  t.close();
+});
+
+test('vak niet instellen: chip-rol, instelling uit, printer bezig, of geen bekend profiel', async () => {
+  let t = await setup(); t.store.state.profileOverrides[5] = PROFILE;
+  await loadAndAssign(t, { tray: tray(false, { tray_uuid: 'A4EBFC83127947D1B328A746B2641149' }) });
+  assert.equal(t.world.assigns.length, 1); assert.equal(t.world.services.length, 0, 'chip-rol: printer kent hem zelf'); t.close();
+  t = await setup(); t.store.state.profileOverrides[5] = PROFILE; t.store.state.settings.setTrayFilament = false;
+  await loadAndAssign(t); assert.equal(t.world.services.length, 0, 'instelling uit'); t.close();
+  t = await setup(); t.store.state.profileOverrides[5] = PROFILE; t.store.state.settings.printerPrefix = 'x2d'; t.world.ha['sensor.x2d_printstatus'] = { state: 'running', attributes: {} };
+  await loadAndAssign(t); assert.equal(t.world.assigns.length, 1); assert.equal(t.world.services.length, 0, 'printer bezig'); t.close();
+  t = await setup();
+  await loadAndAssign(t); assert.equal(t.world.assigns.length, 1); assert.equal(t.world.services.length, 0, 'geen profiel: niets verzinnen');
+  assert.ok(t.store.state.activity.some((a) => /Geen Bambu-profiel bekend/.test(a.message))); t.close();
+});
+
+test('mislukte service-aanroep blokkeert de koppeling niet', async () => {
+  const t = await setup(); t.store.state.profileOverrides[5] = PROFILE; t.bridge.ha.callService = async () => { throw new Error('HA 400'); };
+  await loadAndAssign(t);
+  assert.equal(t.world.assigns.length, 1); assert.equal(t.store.state.pendingAssigns.length, 0);
+  assert.ok(t.store.state.activity.some((a) => /instellen mislukt: HA 400/.test(a.message)));
+  t.close();
 });

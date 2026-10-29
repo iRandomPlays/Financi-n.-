@@ -14,7 +14,7 @@ let overview = null;
 async function refresh() {
   const s = await api('status');
   $('ver').textContent = 'v' + s.version;
-  $('url').value = s.settings.spoolmanUrl; $('interval').value = s.settings.intervalSeconds; $('auto').checked = s.settings.autoSync; $('autocreate').checked = s.settings.autoCreate; $('rfidauto').checked = s.settings.rfidAutoAdd !== false; $('chipleader').value = s.settings.chipLeader || 'spoolman'; $('low').value = s.settings.lowStockGrams; $('syncurl').value = s.settings.spoolmansyncUrl; $('prefix').value = s.settings.printerPrefix;
+  $('url').value = s.settings.spoolmanUrl; $('interval').value = s.settings.intervalSeconds; $('auto').checked = s.settings.autoSync; $('autocreate').checked = s.settings.autoCreate; $('rfidauto').checked = s.settings.rfidAutoAdd !== false; $('chipleader').value = s.settings.chipLeader || 'spoolman'; $('settray').checked = s.settings.setTrayFilament !== false; $('low').value = s.settings.lowStockGrams; $('syncurl').value = s.settings.spoolmansyncUrl; $('prefix').value = s.settings.printerPrefix;
   $('tokenInfo').textContent = s.settings.lanTokenSet ? 'Er is een token ingesteld. Een nieuw token maakt het oude ongeldig.' : 'Nog geen token. Maak er een aan voor de pc-app.';
   const b = s.bambu.status;
   const bl = { connected: 'verbonden', disconnected: 'niet ingelogd', pending_code: 'wacht op code', expired: 'sessie verlopen, log opnieuw in' }[b] || b;
@@ -51,7 +51,7 @@ document.addEventListener('click', run(async (e) => {
 document.addEventListener('change', run(async (e) => {
   const sel = e.target; if (sel.dataset?.pick && sel.value) { await api('links', 'POST', { spoolmanId: sel.dataset.pick, bambuId: sel.value }); msg('Gekoppeld'); overview = await api('overview'); renderOverview(); await refresh(); }
 }));
-$('save').onclick = run(async () => { await api('settings', 'POST', { spoolmanUrl: $('url').value, intervalSeconds: $('interval').value, autoSync: $('auto').checked, autoCreate: $('autocreate').checked, rfidAutoAdd: $('rfidauto').checked, chipLeader: $('chipleader').value, lowStockGrams: $('low').value, spoolmansyncUrl: $('syncurl').value, printerPrefix: $('prefix').value }); msg('Opgeslagen'); await refresh(); });
+$('save').onclick = run(async () => { await api('settings', 'POST', { spoolmanUrl: $('url').value, intervalSeconds: $('interval').value, autoSync: $('auto').checked, autoCreate: $('autocreate').checked, rfidAutoAdd: $('rfidauto').checked, chipLeader: $('chipleader').value, setTrayFilament: $('settray').checked, lowStockGrams: $('low').value, spoolmansyncUrl: $('syncurl').value, printerPrefix: $('prefix').value }); msg('Opgeslagen'); await refresh(); });
 $('doLogin').onclick = run(async () => { const r = await api('bambu/login', 'POST', { email: $('email').value, password: $('pw').value }); $('pw').value = ''; msg(r.needsCode ? 'Voer de verificatiecode in' : 'Ingelogd'); await refresh(); });
 $('doVerify').onclick = run(async () => { await api('bambu/verify', 'POST', { code: $('code').value }); $('code').value = ''; msg('Ingelogd'); await refresh(); });
 $('logout').onclick = run(async () => { await api('bambu/logout', 'POST'); await refresh(); });
