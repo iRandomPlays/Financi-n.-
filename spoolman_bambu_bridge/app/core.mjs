@@ -11,7 +11,7 @@ import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
 import { evaluate, trayLoaded, fetchTrays, assignViaSpoolmanSync } from './trays.mjs';
 import { rfidTrays, normalizeTag, addRfidSpool, assignTrays } from './rfid.mjs';
 
-export const VERSION = '0.11.1';
+export const VERSION = '0.12.0';
 export const RFID_INTERVAL = 60;
 const PENDING_ID = 'sensor.spoolman_tray_koppelingen';
 const TRAY_TEMPS = { PLA: [190, 230], PETG: [220, 260], ABS: [240, 270], ASA: [240, 270], TPU: [200, 230] }; // alleen als Spoolman geen nozzletemperatuur heeft; aanname, geen Bambu-waarden
@@ -87,7 +87,7 @@ function validateRolTypes(list) {
 
 const EMPTY_STATE = () => ({
   version: 1,
-  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, rfidAutoAdd: true, chipLeader: 'spoolman', setTrayFilament: false, lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us',
+  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, rfidAutoAdd: true, chipLeader: 'spoolman', setTrayFilament: false, assignFromBambu: true, lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us',
     locations: ['Vincent', 'Ine'], rolTypes: DEFAULT_ROL_TYPES() },
   profileOverrides: {}, // spoolmanId -> Bambu-profiel dat bij het toevoegen met een vast type is gekozen
   bambu: { token: '', email: '', status: 'disconnected' },
@@ -259,6 +259,7 @@ export function bambuCreateBody(spool, marker, profile = null) {
 
 export const markerFor = (spoolmanId) => `[spoolman:${spoolmanId}]`;
 const isChip = (c) => !!normalizeTag(c?.RFID);
+export const spoolmanIdFromNote = (note) => { const m = /spoolman\D{0,8}(\d+)/i.exec(String(note || '')); return m ? Number(m[1]) : null; };
 
 // ---------- Synchronisatie ----------
 
@@ -296,6 +297,7 @@ export class Bridge {
     if (patch.autoCreate !== undefined) st.autoCreate = !!patch.autoCreate;
     if (patch.rfidAutoAdd !== undefined) st.rfidAutoAdd = !!patch.rfidAutoAdd;
     if (patch.setTrayFilament !== undefined) st.setTrayFilament = !!patch.setTrayFilament;
+    if (patch.assignFromBambu !== undefined) st.assignFromBambu = !!patch.assignFromBambu;
     if (patch.chipLeader !== undefined) {
       if (!['spoolman', 'bambu'].includes(patch.chipLeader)) throw new HttpError('Leidend moet "spoolman" of "bambu" zijn', 400);
       st.chipLeader = patch.chipLeader;
@@ -642,6 +644,45 @@ export class Bridge {
     return link;
   }
 
+  // Bambu's Filament Manager bepaalt welke rol in welk vak zit: staat een rol daar in een AMS-vak (inPrinter, amsSn, slotId) en staat in de
+  // opmerking het Spoolman-nummer ([spoolman:ID]), dan koppelt de bridge die Spoolman-rol via SpoolmanSync aan dat vak. Rollen met een Bambu-chip
+  // (RFID) laat de bridge aan SpoolmanSync (serienummer). Loopt mee in elke ronde; doet niets als de koppeling al klopt.
+  async assignFromBambu(cloud, spools, result) {
+    if (!this.s.settings.assignFromBambu || !this.s.settings.spoolmansyncUrl) return;
+    const claims = new Map(); // vak-id -> [{ spoolId, rollId }]
+    let trays;
+    try { trays = await this.trays(); } catch (e) { return this.logOnce('fm-trays', `Vakken ophalen bij SpoolmanSync mislukt: ${e.message}`); }
+    this.logged && (this.logged['fm-trays'] = '');
+    for (const c of cloud) {
+      if (!c.inPrinter || !c.amsSn || c.slotId == null || c.slotId === '' || normalizeTag(c.RFID)) continue;
+      const id = spoolmanIdFromNote(c.note);
+      const slot = Number(c.slotId);
+      if (!Number.isInteger(slot) || slot < 0) continue;
+      if (!id) { this.logOnce(`fm-note-${c.id}`, `Bambu-rol ${c.id} (${c.filamentName || ''}) zit in een vak maar heeft geen Spoolman-nummer in de opmerking; niet gekoppeld`); continue; }
+      const needle = `_ams_${String(c.amsSn).toLowerCase()}_tray_${slot + 1}`;
+      const tray = trays.find((t) => t.id.toLowerCase().endsWith(needle));
+      if (!tray) continue; // bijv. externe spoel of een AMS die SpoolmanSync niet kent
+      if (!claims.has(tray.id)) claims.set(tray.id, []);
+      claims.get(tray.id).push({ spoolId: id, rollId: c.id, tray });
+    }
+    const exists = new Set(spools.filter((s) => !s.archived).map((s) => s.id));
+    for (const [trayId, list] of claims) {
+      if (list.length > 1) { this.logOnce(`fm-dup-${trayId}`, `Meer dan één Bambu-rol claimt ${list[0].tray.group} ${list[0].tray.label} (${list.map((x) => x.rollId).join(', ')}); niets gewijzigd`); continue; }
+      const { spoolId, tray } = list[0];
+      if (!exists.has(spoolId)) { this.logOnce(`fm-miss-${trayId}-${spoolId}`, `Bambu-rol in ${tray.group} ${tray.label} verwijst naar Spoolman #${spoolId}, die niet (meer) bestaat; niet gekoppeld`); continue; }
+      if (tray.assignedSpoolId === spoolId) continue;
+      try {
+        await assignViaSpoolmanSync(this.syncUrl(), spoolId, tray.id, this.fetchImpl);
+        this.trayCache = null;
+        this.s.pendingAssigns = this.s.pendingAssigns.filter((p) => p.spoolId !== spoolId && p.trayId !== tray.id);
+        this.s.lastAssigned = { spoolId, label: `${tray.printer} ${tray.group} ${tray.label}`, at: new Date().toISOString() };
+        this.store.log('info', `Spoolman #${spoolId} gekoppeld aan ${tray.group} ${tray.label}: Bambu Filament Manager heeft die rol in dat vak gezet`);
+        result.assigned = (result.assigned || 0) + 1;
+        await this.store.save();
+      } catch (e) { result.failed++; this.logOnce(`fm-assign-${spoolId}`, `Koppelen van Spoolman #${spoolId} aan ${tray.group} ${tray.label} mislukt: ${e.message}`); }
+    }
+  }
+
   // Koppelt Spoolman-rollen met een Bambu-chip (extra.tag = serienummer) aan Bambu's eigen regel (RFID = hetzelfde nummer).
   // Een eerder door de bridge gemaakte dubbele handmatige regel ([spoolman:ID] in de notitie) wordt verwijderd; andere regels blijven staan.
   async pairChipRolls(spools, cloud, byB, result) {
@@ -694,6 +735,7 @@ export class Bridge {
       const byB = new Map(cloud.map((c) => [String(c.id), c]));
       const removed = [];
       await this.pairChipRolls(spools, cloud, byB, result);
+      await this.assignFromBambu(cloud, spools, result);
       for (const link of [...this.s.links]) {
         try {
           const sp = byS.get(link.spoolmanId); const bc = byB.get(String(link.bambuId));

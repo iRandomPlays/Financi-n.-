@@ -85,16 +85,18 @@ test('flattenTrays: gebruikt unique_id, slaat virtuele printers over, benoemt ex
 // ---------- bridge met nagebootste Spoolman, SpoolmanSync en Home Assistant ----------
 
 async function setup() {
-  const world = { ha: { [TRAY]: tray(true) }, assigns: [], assignFail: 0, published: {}, services: [],
+  const world = { ha: { [TRAY]: tray(true) }, assigns: [], assignFail: 0, published: {}, services: [], trayAssign: {},
     spools: [{ id: 5, remaining_weight: 900, initial_weight: 1000, archived: false, location: 'Vincent', filament: { name: 'PLA C220 Zwart', material: 'PLA', color_hex: '000000', vendor: { name: 'SUNLU' } } },
              { id: 6, remaining_weight: 100, initial_weight: 1000, archived: true, filament: { name: 'Oud', material: 'PLA', vendor: { name: 'X' } } },
              { id: 7, remaining_weight: 800, initial_weight: 1000, archived: false, filament: { name: 'Wit', material: 'PLA', color_hex: 'FFFFFF', vendor: { name: 'SUNLU' } } }] };
   const sm = await listen((req, res) => json(res, 200, world.spools));
   const ss = await listen(async (req, res) => {
-    if (req.url === '/api/printers') return json(res, 200, { printers: [{ name: 'X2D', ams_units: [{ name: 'AMS 1', trays: [{ entity_id: TRAY, unique_id: 'uid-tray-1', tray_number: 1, name: 'Sunlu', color: '#112233FF' }] }], external_spools: [] }] });
+    if (req.url === '/api/printers') return json(res, 200, { printers: [{ name: 'X2D', ams_units: [{ name: 'AMS 1', trays: [
+      { entity_id: TRAY, unique_id: 'uid-tray-1', tray_number: 1, name: 'Sunlu', color: '#112233FF', ...(world.trayAssign['uid-tray-1'] ? { assigned_spool: { id: world.trayAssign['uid-tray-1'] } } : {}) },
+      { entity_id: 'sensor.x2d_ams_1_tray_2', unique_id: 'X2D_SN1_AMS_19C51A62090007W_tray_2', tray_number: 2, name: 'PLA', color: '#35BA96FF', ...(world.trayAssign['X2D_SN1_AMS_19C51A62090007W_tray_2'] ? { assigned_spool: { id: world.trayAssign['X2D_SN1_AMS_19C51A62090007W_tray_2'] } } : {}) }] }], external_spools: [] }] });
     if (req.url === '/api/spools' && req.method === 'POST') {
       if (world.assignFail > 0) { world.assignFail--; return json(res, 500, { error: 'Failed to assign spool' }); }
-      world.assigns.push(await readBody(req)); return json(res, 200, { spool: {} });
+      const b = await readBody(req); world.assigns.push(b); for (const k of Object.keys(world.trayAssign)) if (world.trayAssign[k] === b.spoolId || k === b.trayId) delete world.trayAssign[k]; world.trayAssign[b.trayId] = b.spoolId; return json(res, 200, { spool: {} });
     }
     json(res, 404, {});
   });
@@ -281,5 +283,50 @@ test('scanpagina: staat het vak in de printer nog op "?", dan staat er wat je da
   assert.deepEqual(info.hint, { tray: 'AMS 1 Tray 1', profile: 'SUNLU PLA C220', type: 'PLA', colorHex: '#000000', nozzle: 220 });
   t.world.ha[TRAY] = { state: 'Sunlu PLA', attributes: { empty: false, unknown: false, tray_uuid: '' } };
   assert.equal((await t.bridge.scanInfo(5)).hint, null);
+  t.close();
+});
+
+// ---------- Bambu Filament Manager bepaalt welke rol in welk vak zit ----------
+const fm = (over) => ({ id: 18811660, inPrinter: true, devId: '20P9BJ620700578', amsSn: '19C51A62090007W', amsId: 0, slotId: '1', RFID: '', createType: 'manual', note: '[spoolman:5]', filamentName: 'PLA C220', ...over });
+const SLOT2 = 'X2D_SN1_AMS_19C51A62090007W_tray_2';
+
+test('FM: een rol in een AMS-vak met [spoolman:ID] in de opmerking wordt aan dat vak gekoppeld (slotId 1 = Tray 2); daarna geen herhaling', async () => {
+  const t = await setup(); const r = { failed: 0 };
+  await t.bridge.assignFromBambu([fm()], [{ id: 5, archived: false }], r);
+  assert.deepEqual(t.world.assigns, [{ spoolId: 5, trayId: SLOT2 }]); assert.equal(r.assigned, 1);
+  assert.equal(t.store.state.lastAssigned.spoolId, 5);
+  await t.bridge.assignFromBambu([fm()], [{ id: 5, archived: false }], r);
+  assert.equal(t.world.assigns.length, 1, 'klopt al: niets opnieuw');
+  t.close();
+});
+
+test('FM: een andere rol in hetzelfde vak vervangt de koppeling; een wachtende QR-koppeling voor die rol vervalt', async () => {
+  const t = await setup(); t.world.trayAssign[SLOT2] = 7;
+  t.store.state.pendingAssigns.push({ spoolId: 5, trayId: 'uid-tray-1', entityId: TRAY, label: 'x', createdAt: Date.now(), baseLoaded: false, armed: false, loadedSince: 0 });
+  await t.bridge.assignFromBambu([fm({ note: 'Spoolman 5' })], [{ id: 5, archived: false }, { id: 7, archived: false }], { failed: 0 });
+  assert.deepEqual(t.world.assigns, [{ spoolId: 5, trayId: SLOT2 }]); assert.equal(t.world.trayAssign[SLOT2], 5);
+  assert.equal(t.store.state.pendingAssigns.length, 0);
+  t.close();
+});
+
+test('FM: niet koppelen bij onbruikbare gegevens (geen nummer, onbekende rol, chip-rol, niet in printer, twee rollen op één vak, onbekend vak, instelling uit)', async () => {
+  const t = await setup(); const spools = [{ id: 5, archived: false }];
+  await t.bridge.assignFromBambu([fm({ note: '' }), fm({ id: 2, note: '[spoolman:99]' }), fm({ id: 3, RFID: 'A4EBFC83127947D1B328A746B2641149' }), fm({ id: 4, inPrinter: false }),
+    fm({ id: 6, amsSn: 'ANDERE' }), fm({ id: 7, slotId: '', note: '[spoolman:5]' })], spools, { failed: 0 });
+  assert.equal(t.world.assigns.length, 0);
+  await t.bridge.assignFromBambu([fm({ id: 8, note: '[spoolman:5]' }), fm({ id: 9, note: '[spoolman:5]' })], spools, { failed: 0 });
+  assert.equal(t.world.assigns.length, 0, 'twee rollen op één vak: niets doen');
+  assert.ok(t.store.state.activity.some((a) => /geen Spoolman-nummer/.test(a.message)) && t.store.state.activity.some((a) => /Meer dan één Bambu-rol/.test(a.message)) && t.store.state.activity.some((a) => /die niet \(meer\) bestaat/.test(a.message)));
+  t.store.state.settings.assignFromBambu = false;
+  await t.bridge.assignFromBambu([fm()], spools, { failed: 0 }); assert.equal(t.world.assigns.length, 0, 'instelling uit');
+  t.close();
+});
+
+test('FM: een mislukte koppeling telt als fout en wordt de volgende ronde opnieuw geprobeerd', async () => {
+  const t = await setup(); t.world.assignFail = 1; const r = { failed: 0 };
+  await t.bridge.assignFromBambu([fm()], [{ id: 5, archived: false }], r);
+  assert.equal(r.failed, 1); assert.equal(t.world.assigns.length, 0);
+  await t.bridge.assignFromBambu([fm()], [{ id: 5, archived: false }], r);
+  assert.equal(t.world.assigns.length, 1);
   t.close();
 });

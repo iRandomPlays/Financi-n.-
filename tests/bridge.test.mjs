@@ -4,7 +4,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { Store, Bridge, bambuCreateBody } from '../spoolman_bambu_bridge/app/core.mjs';
+import { Store, Bridge, bambuCreateBody, spoolmanIdFromNote } from '../spoolman_bambu_bridge/app/core.mjs';
 import { analyzeGcode, proposeAbort, gramsFromMm } from '../spoolman_bambu_bridge/app/usage.mjs';
 import { buildStates, HaPublisher } from '../spoolman_bambu_bridge/app/publish.mjs';
 import { ingest, historyState, fetchUsageLogs } from '../spoolman_bambu_bridge/app/history.mjs';
@@ -414,4 +414,9 @@ test('chipLeader staat standaard op Spoolman: chip-rol wordt aan Bambu\'s eigen 
   assert.equal(t.sm.spools[0].remaining_weight, 625);
   await assert.rejects(t.bridge.updateSettings({ chipLeader: 'iets' }), /Leidend/);
   t.close();
+});
+
+test('Spoolman-nummer uit de opmerking van een Bambu-rol', () => {
+  assert.equal(spoolmanIdFromNote('[spoolman:21]'), 21); assert.equal(spoolmanIdFromNote('Spoolman 7'), 7); assert.equal(spoolmanIdFromNote('spoolman id: 12 extra'), 12);
+  assert.equal(spoolmanIdFromNote(''), null); assert.equal(spoolmanIdFromNote(null), null); assert.equal(spoolmanIdFromNote('rol 5 van Sunlu'), null);
 });

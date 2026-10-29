@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 0.12.0
+- Nieuwe werkwijze voor het koppelen aan een vak: Bambu Filament Manager bepaalt welke rol in welk AMS-vak zit. Zet je in Handy of Studio een rol uit Filament Manager in een vak, dan ziet de bridge dat in je Bambu-account (rol met `inPrinter`, AMS-serienummer en vaknummer) en koppelt hij de Spoolman-rol uit de opmerking (`[spoolman:ID]`, ook "spoolman 12") via SpoolmanSync aan dat vak. Elke ronde; doet niets als het al klopt.
+- Rollen met een Bambu-chip blijven bij SpoolmanSync (serienummer). Geen nummer in de opmerking, onbekend nummer, twee rollen op één vak: er wordt niets gekoppeld en het staat in de activiteit.
+- Een koppeling uit Filament Manager vervangt een eerdere koppeling van dat vak en een wachtende QR-koppeling voor die rol. Het QR-label blijft werken als alternatief. Instelling "Rol aan vak koppelen zodra Bambu Filament Manager die rol in een AMS-vak zet" (standaard aan).
+
 ## 0.11.1
 - Instelling "Na koppelen aan een tray het filament in de printer instellen" staat nu standaard **uit**. Op de X2D van de gebruiker weigert de printer besturing vanuit Home Assistant (`Printer firmware requires mqtt encryption. All control actions are blocked.`); `bambu_lab.set_filament` meldt dan geen fout maar doet niets. Met Developer-modus zou het kunnen, maar die modus sluit volgens Bambu de verbinding met de Bambu Cloud uit.
 - De scanpagina zegt nu wat je in de printer moet kiezen als het gekoppelde vak daar nog "?" toont (profiel, kleur, temperatuur).
