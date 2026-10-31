@@ -1,5 +1,5 @@
 name: "Spoolman Bambu Bridge"
-version: "0.12.1"
+version: "0.12.2"
 slug: spoolman_bambu_bridge
 description: "Synchroniseert resterende grammen van Spoolman naar Bambu's Filament Manager"
 url: "https://example.invalid/spoolman-bambu-bridge"

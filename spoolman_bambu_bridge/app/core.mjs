@@ -11,7 +11,7 @@ import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
 import { evaluate, trayLoaded, fetchTrays, assignViaSpoolmanSync } from './trays.mjs';
 import { rfidTrays, normalizeTag, addRfidSpool, assignTrays } from './rfid.mjs';
 
-export const VERSION = '0.12.1';
+export const VERSION = '0.12.2';
 export const RFID_INTERVAL = 60;
 const PENDING_ID = 'sensor.spoolman_tray_koppelingen';
 const TRAY_TEMPS = { PLA: [190, 230], PETG: [220, 260], ABS: [240, 270], ASA: [240, 270], TPU: [200, 230] }; // alleen als Spoolman geen nozzletemperatuur heeft; aanname, geen Bambu-waarden
@@ -87,7 +87,7 @@ function validateRolTypes(list) {
 
 const EMPTY_STATE = () => ({
   version: 1,
-  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, rfidAutoAdd: true, chipLeader: 'spoolman', setTrayFilament: false, assignFromBambu: true, lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us',
+  settings: { spoolmanUrl: '', intervalSeconds: DEFAULT_INTERVAL, autoSync: false, autoCreate: false, rfidAutoAdd: true, chipLeader: 'spoolman', setTrayFilament: false, assignFromBambu: false, lowStockGrams: 100, spoolmansyncUrl: '', printerPrefix: '', region: 'us',
     locations: ['Vincent', 'Ine'], rolTypes: DEFAULT_ROL_TYPES() },
   profileOverrides: {}, // spoolmanId -> Bambu-profiel dat bij het toevoegen met een vast type is gekozen
   bambu: { token: '', email: '', status: 'disconnected' },

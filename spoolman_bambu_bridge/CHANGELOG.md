@@ -1,5 +1,8 @@
 # Wijzigingen
 
+## 0.12.2
+- Koppelen via Bambu Filament Manager (0.12.0/0.12.1) staat nu standaard **uit**. Voor rollen zonder chip (Sunlu e.d.) werkt het in de praktijk nog niet betrouwbaar; die koppel je via het QR-label. Bambu's eigen rollen met chip koppelt SpoolmanSync zelf via het serienummer. De functie blijft aan te zetten in de bridge-instellingen.
+
 ## 0.12.1
 - Fix: Filament Manager overschreef jouw eigen keuze. Wie een rol via de QR-pagina aan een vak koppelde, zag die koppeling binnen een minuut terugspringen naar de rol die Filament Manager in dat vak heeft. Nu grijpt Filament Manager alleen in als daar iets verandert (een andere rol in het vak, of dezelfde rol er opnieuw in). Je eigen keuze blijft staan zolang Filament Manager hetzelfde zegt. De eerste ronde na het bijwerken vult alleen vakken zonder koppeling in.
 

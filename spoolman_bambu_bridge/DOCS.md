@@ -39,7 +39,12 @@ Bij het aanmaken van een rol in Bambu zoekt de bridge het profiel (het "Type" in
 ## Vaste typen en locaties (rolscanner)
 De bridge bewaart de typen die de rolscanner in het menu toont: label, merk, materiaal, productnaam, standaard nozzletemperatuur en het Bambu-profiel (`id`, `vendor`, `name`). Standaard staan erin: SUNLU PLA C190 (`P71db9ac`), C210 (`Paed3d28`), C220 (`P9877e1f`) en PETG Basic (`P05a4964`); de nozzletemperaturen 190, 210 en 220 horen bij de eerste drie, bij PETG Basic en voor bed is niets ingevuld. De ID's komen uit je eigen Bambu-account (`GET /api/bambu/slicer-probe`, onder "private"). Typen en locaties pas je aan via `POST /api/settings` met `rolTypes` of `locations`. De locatie komt alleen in Spoolman (veld "Locatie") en niet in Bambu.
 
-## Aanbevolen werkwijze (Filament Manager bepaalt het vak)
+## Werkwijze per soort rol
+- **Bambu's eigen rollen (met chip):** SpoolmanSync koppelt ze vanzelf aan het vak via het serienummer; de bridge zet de rol in Spoolman en koppelt hem aan Bambu's eigen Filament Manager-regel.
+- **Sunlu en andere rollen zonder chip:** koppel ze via het QR-label (scan, kies het vak, doe de rol erin).
+- De functie hieronder (Filament Manager bepaalt het vak) is experimenteel en staat standaard uit.
+
+## Experimenteel: Filament Manager bepaalt het vak (standaard uit)
 1. Voeg een rol toe aan Spoolman (rolscanner of Spoolman zelf). De bridge maakt hem in Bambu's Filament Manager aan, met `[spoolman:ID]` in de opmerking.
 2. Zet in Handy of Bambu Studio die rol in het AMS-vak (Filament Manager).
 3. Binnen een ronde (standaard 1 minuut) koppelt de bridge de Spoolman-rol via SpoolmanSync aan dat vak; verbruik wordt dan op die rol afgeboekt.

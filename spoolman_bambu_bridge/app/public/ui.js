@@ -14,7 +14,7 @@ let overview = null;
 async function refresh() {
   const s = await api('status');
   $('ver').textContent = 'v' + s.version;
-  $('url').value = s.settings.spoolmanUrl; $('interval').value = s.settings.intervalSeconds; $('auto').checked = s.settings.autoSync; $('autocreate').checked = s.settings.autoCreate; $('rfidauto').checked = s.settings.rfidAutoAdd !== false; $('chipleader').value = s.settings.chipLeader || 'spoolman'; $('settray').checked = s.settings.setTrayFilament === true; $('assignfm').checked = s.settings.assignFromBambu !== false; $('low').value = s.settings.lowStockGrams; $('syncurl').value = s.settings.spoolmansyncUrl; $('prefix').value = s.settings.printerPrefix;
+  $('url').value = s.settings.spoolmanUrl; $('interval').value = s.settings.intervalSeconds; $('auto').checked = s.settings.autoSync; $('autocreate').checked = s.settings.autoCreate; $('rfidauto').checked = s.settings.rfidAutoAdd !== false; $('chipleader').value = s.settings.chipLeader || 'spoolman'; $('settray').checked = s.settings.setTrayFilament === true; $('assignfm').checked = s.settings.assignFromBambu === true; $('low').value = s.settings.lowStockGrams; $('syncurl').value = s.settings.spoolmansyncUrl; $('prefix').value = s.settings.printerPrefix;
   $('tokenInfo').textContent = s.settings.lanTokenSet ? 'Er is een token ingesteld. Een nieuw token maakt het oude ongeldig.' : 'Nog geen token. Maak er een aan voor de pc-app.';
   const b = s.bambu.status;
   const bl = { connected: 'verbonden', disconnected: 'niet ingelogd', pending_code: 'wacht op code', expired: 'sessie verlopen, log opnieuw in' }[b] || b;

@@ -291,7 +291,7 @@ const fm = (over) => ({ id: 18811660, inPrinter: true, devId: '20P9BJ620700578',
 const SLOT2 = 'X2D_SN1_AMS_19C51A62090007W_tray_2';
 
 test('FM: een rol in een AMS-vak met [spoolman:ID] in de opmerking wordt aan dat vak gekoppeld (slotId 1 = Tray 2); daarna geen herhaling', async () => {
-  const t = await setup(); const r = { failed: 0 };
+  const t = await setup(); t.store.state.settings.assignFromBambu = true; const r = { failed: 0 };
   await t.bridge.assignFromBambu([fm()], [{ id: 5, archived: false }], r);
   assert.deepEqual(t.world.assigns, [{ spoolId: 5, trayId: SLOT2 }]); assert.equal(r.assigned, 1);
   assert.equal(t.store.state.lastAssigned.spoolId, 5);
@@ -301,7 +301,7 @@ test('FM: een rol in een AMS-vak met [spoolman:ID] in de opmerking wordt aan dat
 });
 
 test('FM: een andere rol in hetzelfde vak vervangt de koppeling; een wachtende QR-koppeling voor die rol vervalt', async () => {
-  const t = await setup(); t.world.trayAssign[SLOT2] = 7;
+  const t = await setup(); t.store.state.settings.assignFromBambu = true; t.world.trayAssign[SLOT2] = 7;
   await t.bridge.assignFromBambu([], [{ id: 5, archived: false }, { id: 7, archived: false }], { failed: 0 }); // eerste ronde: geheugen aanmaken
   t.store.state.pendingAssigns.push({ spoolId: 5, trayId: 'uid-tray-1', entityId: TRAY, label: 'x', createdAt: Date.now(), baseLoaded: false, armed: false, loadedSince: 0 });
   await t.bridge.assignFromBambu([fm({ note: 'Spoolman 5' })], [{ id: 5, archived: false }, { id: 7, archived: false }], { failed: 0 });
@@ -311,7 +311,7 @@ test('FM: een andere rol in hetzelfde vak vervangt de koppeling; een wachtende Q
 });
 
 test('FM: jouw eigen keuze (QR-pagina) blijft staan zolang Filament Manager hetzelfde zegt; pas een wijziging daar grijpt in', async () => {
-  const t = await setup(); const spools = [5, 7, 20].map((id) => ({ id, archived: false }));
+  const t = await setup(); t.store.state.settings.assignFromBambu = true; const spools = [5, 7, 20].map((id) => ({ id, archived: false }));
   await t.bridge.assignFromBambu([fm()], spools, { failed: 0 });                  // FM: rol 5 in vak 2 -> gekoppeld
   assert.equal(t.world.trayAssign[SLOT2], 5);
   t.world.trayAssign[SLOT2] = 20; t.bridge.trayCache = null;                       // jij kiest rol 20 via de QR-pagina
@@ -327,14 +327,14 @@ test('FM: jouw eigen keuze (QR-pagina) blijft staan zolang Filament Manager hetz
 });
 
 test('FM: de eerste keer (geen geheugen) worden bestaande koppelingen niet overschreven, lege vakken wel ingevuld', async () => {
-  const t = await setup(); t.world.trayAssign[SLOT2] = 20;
+  const t = await setup(); t.store.state.settings.assignFromBambu = true; t.world.trayAssign[SLOT2] = 20;
   await t.bridge.assignFromBambu([fm()], [5, 20].map((id) => ({ id, archived: false })), { failed: 0 });
   assert.equal(t.world.assigns.length, 0); assert.equal(t.world.trayAssign[SLOT2], 20);
   t.close();
 });
 
 test('FM: niet koppelen bij onbruikbare gegevens (geen nummer, onbekende rol, chip-rol, niet in printer, twee rollen op één vak, onbekend vak, instelling uit)', async () => {
-  const t = await setup(); const spools = [{ id: 5, archived: false }];
+  const t = await setup(); t.store.state.settings.assignFromBambu = true; const spools = [{ id: 5, archived: false }];
   await t.bridge.assignFromBambu([fm({ note: '' }), fm({ id: 2, note: '[spoolman:99]' }), fm({ id: 3, RFID: 'A4EBFC83127947D1B328A746B2641149' }), fm({ id: 4, inPrinter: false }),
     fm({ id: 6, amsSn: 'ANDERE' }), fm({ id: 7, slotId: '', note: '[spoolman:5]' })], spools, { failed: 0 });
   assert.equal(t.world.assigns.length, 0);
@@ -347,10 +347,16 @@ test('FM: niet koppelen bij onbruikbare gegevens (geen nummer, onbekende rol, ch
 });
 
 test('FM: een mislukte koppeling telt als fout en wordt de volgende ronde opnieuw geprobeerd', async () => {
-  const t = await setup(); t.world.assignFail = 1; const r = { failed: 0 };
+  const t = await setup(); t.store.state.settings.assignFromBambu = true; t.world.assignFail = 1; const r = { failed: 0 };
   await t.bridge.assignFromBambu([fm()], [{ id: 5, archived: false }], r);
   assert.equal(r.failed, 1); assert.equal(t.world.assigns.length, 0);
   await t.bridge.assignFromBambu([fm()], [{ id: 5, archived: false }], r);
   assert.equal(t.world.assigns.length, 1);
+  t.close();
+});
+
+test('FM-koppeling staat standaard uit', async () => {
+  const t = await setup(); assert.equal(t.store.state.settings.assignFromBambu, false);
+  await t.bridge.assignFromBambu([fm()], [{ id: 5, archived: false }], { failed: 0 }); assert.equal(t.world.assigns.length, 0);
   t.close();
 });
