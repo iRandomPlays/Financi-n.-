@@ -1,5 +1,8 @@
 # Wijzigingen
 
+## 0.12.1
+- Fix: Filament Manager overschreef jouw eigen keuze. Wie een rol via de QR-pagina aan een vak koppelde, zag die koppeling binnen een minuut terugspringen naar de rol die Filament Manager in dat vak heeft. Nu grijpt Filament Manager alleen in als daar iets verandert (een andere rol in het vak, of dezelfde rol er opnieuw in). Je eigen keuze blijft staan zolang Filament Manager hetzelfde zegt. De eerste ronde na het bijwerken vult alleen vakken zonder koppeling in.
+
 ## 0.12.0
 - Nieuwe werkwijze voor het koppelen aan een vak: Bambu Filament Manager bepaalt welke rol in welk AMS-vak zit. Zet je in Handy of Studio een rol uit Filament Manager in een vak, dan ziet de bridge dat in je Bambu-account (rol met `inPrinter`, AMS-serienummer en vaknummer) en koppelt hij de Spoolman-rol uit de opmerking (`[spoolman:ID]`, ook "spoolman 12") via SpoolmanSync aan dat vak. Elke ronde; doet niets als het al klopt.
 - Rollen met een Bambu-chip blijven bij SpoolmanSync (serienummer). Geen nummer in de opmerking, onbekend nummer, twee rollen op één vak: er wordt niets gekoppeld en het staat in de activiteit.

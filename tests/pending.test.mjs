@@ -302,10 +302,34 @@ test('FM: een rol in een AMS-vak met [spoolman:ID] in de opmerking wordt aan dat
 
 test('FM: een andere rol in hetzelfde vak vervangt de koppeling; een wachtende QR-koppeling voor die rol vervalt', async () => {
   const t = await setup(); t.world.trayAssign[SLOT2] = 7;
+  await t.bridge.assignFromBambu([], [{ id: 5, archived: false }, { id: 7, archived: false }], { failed: 0 }); // eerste ronde: geheugen aanmaken
   t.store.state.pendingAssigns.push({ spoolId: 5, trayId: 'uid-tray-1', entityId: TRAY, label: 'x', createdAt: Date.now(), baseLoaded: false, armed: false, loadedSince: 0 });
   await t.bridge.assignFromBambu([fm({ note: 'Spoolman 5' })], [{ id: 5, archived: false }, { id: 7, archived: false }], { failed: 0 });
   assert.deepEqual(t.world.assigns, [{ spoolId: 5, trayId: SLOT2 }]); assert.equal(t.world.trayAssign[SLOT2], 5);
   assert.equal(t.store.state.pendingAssigns.length, 0);
+  t.close();
+});
+
+test('FM: jouw eigen keuze (QR-pagina) blijft staan zolang Filament Manager hetzelfde zegt; pas een wijziging daar grijpt in', async () => {
+  const t = await setup(); const spools = [5, 7, 20].map((id) => ({ id, archived: false }));
+  await t.bridge.assignFromBambu([fm()], spools, { failed: 0 });                  // FM: rol 5 in vak 2 -> gekoppeld
+  assert.equal(t.world.trayAssign[SLOT2], 5);
+  t.world.trayAssign[SLOT2] = 20; t.bridge.trayCache = null;                       // jij kiest rol 20 via de QR-pagina
+  for (let i = 0; i < 3; i++) await t.bridge.assignFromBambu([fm()], spools, { failed: 0 });
+  assert.equal(t.world.trayAssign[SLOT2], 20, 'FM zegt nog steeds rol 5: niet terugzetten');
+  await t.bridge.assignFromBambu([fm({ note: '[spoolman:7]' })], spools, { failed: 0 }); // FM: nu rol 7 in vak 2
+  assert.equal(t.world.trayAssign[SLOT2], 7);
+  await t.bridge.assignFromBambu([], spools, { failed: 0 });                       // rol eruit in FM
+  t.world.trayAssign[SLOT2] = 20; t.bridge.trayCache = null;
+  await t.bridge.assignFromBambu([fm({ note: '[spoolman:7]' })], spools, { failed: 0 }); // rol 7 weer erin: dat is een nieuwe wijziging
+  assert.equal(t.world.trayAssign[SLOT2], 7);
+  t.close();
+});
+
+test('FM: de eerste keer (geen geheugen) worden bestaande koppelingen niet overschreven, lege vakken wel ingevuld', async () => {
+  const t = await setup(); t.world.trayAssign[SLOT2] = 20;
+  await t.bridge.assignFromBambu([fm()], [5, 20].map((id) => ({ id, archived: false })), { failed: 0 });
+  assert.equal(t.world.assigns.length, 0); assert.equal(t.world.trayAssign[SLOT2], 20);
   t.close();
 });
 

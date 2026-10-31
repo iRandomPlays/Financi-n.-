@@ -43,7 +43,7 @@ De bridge bewaart de typen die de rolscanner in het menu toont: label, merk, mat
 1. Voeg een rol toe aan Spoolman (rolscanner of Spoolman zelf). De bridge maakt hem in Bambu's Filament Manager aan, met `[spoolman:ID]` in de opmerking.
 2. Zet in Handy of Bambu Studio die rol in het AMS-vak (Filament Manager).
 3. Binnen een ronde (standaard 1 minuut) koppelt de bridge de Spoolman-rol via SpoolmanSync aan dat vak; verbruik wordt dan op die rol afgeboekt.
-Rollen met een Bambu-chip koppelt SpoolmanSync zelf via het serienummer. Voorwaarden: de printer meldt zich bij de Bambu Cloud (niet in LAN-modus, anders weet de cloud niet welk vak welke rol heeft) en de SpoolmanSync-URL staat ingevuld. Het QR-label met "wacht op rol" blijft als alternatief.
+Rollen met een Bambu-chip koppelt SpoolmanSync zelf via het serienummer. Voorwaarden: de printer meldt zich bij de Bambu Cloud (niet in LAN-modus, anders weet de cloud niet welk vak welke rol heeft) en de SpoolmanSync-URL staat ingevuld. Het QR-label met "wacht op rol" blijft als alternatief. Filament Manager grijpt alleen in als daar iets verandert (een andere rol in het vak, of dezelfde rol er opnieuw in); een koppeling die je daarna zelf via de QR-pagina maakt, blijft staan tot Filament Manager een andere rol in dat vak zet.
 
 ## Wie is leidend?
 - **Rollen zonder chip** (Sunlu e.d.): Spoolman is leidend. Het resterende gewicht en de volle rol gaan van Spoolman naar Bambu.

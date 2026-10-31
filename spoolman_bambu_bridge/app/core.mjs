@@ -11,7 +11,7 @@ import { listProfiles, deriveProfiles, matchProfile } from './profiles.mjs';
 import { evaluate, trayLoaded, fetchTrays, assignViaSpoolmanSync } from './trays.mjs';
 import { rfidTrays, normalizeTag, addRfidSpool, assignTrays } from './rfid.mjs';
 
-export const VERSION = '0.12.0';
+export const VERSION = '0.12.1';
 export const RFID_INTERVAL = 60;
 const PENDING_ID = 'sensor.spoolman_tray_koppelingen';
 const TRAY_TEMPS = { PLA: [190, 230], PETG: [220, 260], ABS: [240, 270], ASA: [240, 270], TPU: [200, 230] }; // alleen als Spoolman geen nozzletemperatuur heeft; aanname, geen Bambu-waarden
@@ -94,6 +94,7 @@ const EMPTY_STATE = () => ({
   links: [], // { id, spoolmanId, bambuId, paused, pauseReason, lastSyncedGrams, lastSyncAt, lastError, createdAt }
   pendingCreates: [], // { spoolmanId, marker, startedAt }
   history: { prints: [], seen: [] },
+  fmSeen: null, // vak-id -> Spoolman-nummer dat Filament Manager de vorige ronde in dat vak had; null = nog niet bekeken
   pendingAssigns: [], // { spoolId, trayId, entityId, label, createdAt, baseLoaded, baseUuid, armed, loadedSince, phase, lastError }
   lastAssigned: null, // { spoolId, label, at }
   activity: [],
@@ -666,11 +667,18 @@ export class Bridge {
       claims.get(tray.id).push({ spoolId: id, rollId: c.id, tray });
     }
     const exists = new Set(spools.filter((s) => !s.archived).map((s) => s.id));
+    // Alleen een VERANDERING in Filament Manager grijpt in: wat jij daarna zelf kiest (QR-pagina, SpoolmanSync) blijft staan tot Filament Manager een andere rol in dat vak zet.
+    // De eerste keer (geen geheugen) worden alleen vakken zonder koppeling ingevuld, zodat bestaande koppelingen niet worden overschreven.
+    const first = this.s.fmSeen == null;
+    const seen = this.s.fmSeen || {};
+    const next = {};
     for (const [trayId, list] of claims) {
-      if (list.length > 1) { this.logOnce(`fm-dup-${trayId}`, `Meer dan één Bambu-rol claimt ${list[0].tray.group} ${list[0].tray.label} (${list.map((x) => x.rollId).join(', ')}); niets gewijzigd`); continue; }
+      if (list.length > 1) { this.logOnce(`fm-dup-${trayId}`, `Meer dan één Bambu-rol claimt ${list[0].tray.group} ${list[0].tray.label} (${list.map((x) => x.rollId).join(', ')}); niets gewijzigd`); if (seen[trayId] != null) next[trayId] = seen[trayId]; continue; }
       const { spoolId, tray } = list[0];
       if (!exists.has(spoolId)) { this.logOnce(`fm-miss-${trayId}-${spoolId}`, `Bambu-rol in ${tray.group} ${tray.label} verwijst naar Spoolman #${spoolId}, die niet (meer) bestaat; niet gekoppeld`); continue; }
-      if (tray.assignedSpoolId === spoolId) continue;
+      if (tray.assignedSpoolId === spoolId) { next[trayId] = spoolId; continue; }
+      if (seen[trayId] === spoolId) { next[trayId] = spoolId; continue; } // Filament Manager zegt nog hetzelfde: jouw eigen keuze niet overschrijven
+      if (first && tray.assignedSpoolId != null) { next[trayId] = spoolId; continue; }
       try {
         await assignViaSpoolmanSync(this.syncUrl(), spoolId, tray.id, this.fetchImpl);
         this.trayCache = null;
@@ -678,9 +686,10 @@ export class Bridge {
         this.s.lastAssigned = { spoolId, label: `${tray.printer} ${tray.group} ${tray.label}`, at: new Date().toISOString() };
         this.store.log('info', `Spoolman #${spoolId} gekoppeld aan ${tray.group} ${tray.label}: Bambu Filament Manager heeft die rol in dat vak gezet`);
         result.assigned = (result.assigned || 0) + 1;
-        await this.store.save();
+        next[trayId] = spoolId;
       } catch (e) { result.failed++; this.logOnce(`fm-assign-${spoolId}`, `Koppelen van Spoolman #${spoolId} aan ${tray.group} ${tray.label} mislukt: ${e.message}`); }
     }
+    if (JSON.stringify(next) !== JSON.stringify(this.s.fmSeen)) { this.s.fmSeen = next; await this.store.save(); }
   }
 
   // Koppelt Spoolman-rollen met een Bambu-chip (extra.tag = serienummer) aan Bambu's eigen regel (RFID = hetzelfde nummer).
